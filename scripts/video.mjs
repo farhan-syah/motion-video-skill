@@ -10,6 +10,8 @@ import { ManifestError, AUDIO_LEAD, loadManifest, pickScenes } from './lib/manif
 const HELP = `Usage: node video.mjs <command> [options]
 
 Commands:
+  doctor [DIR]                   Sweep before directing: CPU, memory, GPU drawing and encoding, tools, speech runtime
+                                 and models, the configured TTS, and the media and documents in DIR (default: here).
   init <dir>                     Create a project: direction.md, video.json, base.css, ui.css, world.css,
                                  atmosphere.css, icons.js, motion.js, fonts/, scenes/01-hook.html.
   lib NAME ...                   Copy a browser library into ./lib/ and print how to load it.
@@ -18,6 +20,24 @@ Commands:
   font "FAMILY" [--subset S,...]
                                  Fetch any Fontsource family (Google Fonts and more, all open licensed) into fonts/,
                                  variable when it exists, and write fonts/<family>.css. Default subset: latin.
+  map --out SVG [--fit A,B | --bbox LON1,LAT1,LON2,LAT2] [--highlight A,B] [--pin Label@LON,LAT]...
+      [--route Label@LON,LAT>LON,LAT>...]... [--land FILE.geojson] [--layer FILE.geojson]...
+      [--detail 10m|50m|110m] [--size WxH] [--countries]
+                                 Draw a map from Natural Earth outlines: countries, highlights, pins, great-circle routes.
+                                 --land replaces the outlines with precise polygons, --layer draws lines and areas.
+                                 Default size: the manifest's. --countries lists every country name.
+  speak TEXT|FILE [--engine kokoro|voxcpm] [--voice V] [--reference WAV] [--speed S]
+        [--model HF_ID | --command "TEMPLATE"] [--out WAV]
+                                 Narration from a script. Writes the WAV and its script next to it (default
+                                 assets/voiceover.wav and .txt). Engine: --command runs any TTS with {text},
+                                 {text_file}, {out} and {voice}; --engine voxcpm runs VoxCPM2 (30 languages, voice
+                                 design with --voice "(description)", cloning with --reference; NVIDIA GPU, 8 GB);
+                                 --model runs a transformers.js TTS model; the default is Kokoro (local, English).
+                                 "tts" in ~/.config/motion-video/config.json sets defaults.
+  transcribe [FILE ...] [--model M] [--language L] [--script TXT]
+                                 Word-level timestamps for narration, from a local Whisper model. With no FILE: the
+                                 manifest's voiceover and every scene audio. Writes out/voice/<name>.words.json and
+                                 prints each word at its video time. Installs the speech runtime once, on first use.
   footage FILE [--name N] [--from S] [--to S] [--fps F] [--width W]
                                  Extract a video clip into assets/N/ as frames and print the <img data-frames> tag.
                                  Defaults: N from the file name, the whole clip, the manifest fps and width.
@@ -52,7 +72,7 @@ function num(flag, v, min) {
 }
 
 function parseArgs(argv) {
-  const opts = { manifest: 'video.json', scene: null, draft: false, force: false, scale: 1, jobs: null, start: null, name: null, subset: null, from: null, to: null, fps: null, width: null, rest: [] };
+  const opts = { manifest: 'video.json', scene: null, draft: false, force: false, scale: 1, jobs: null, start: null, name: null, subset: null, model: null, language: null, script: null, voice: null, speed: null, out: null, command: null, engine: null, reference: null, device: null, fit: null, bbox: null, highlight: null, pin: [], route: [], layer: [], land: null, detail: null, size: null, countries: false, from: null, to: null, fps: null, width: null, rest: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--manifest') opts.manifest = argv[++i];
@@ -64,6 +84,26 @@ function parseArgs(argv) {
     else if (a === '--start') opts.start = num(a, argv[++i], 0);
     else if (a === '--name') opts.name = argv[++i];
     else if (a === '--subset') opts.subset = argv[++i];
+    else if (a === '--model') opts.model = argv[++i];
+    else if (a === '--language') opts.language = argv[++i];
+    else if (a === '--script') opts.script = argv[++i];
+    else if (a === '--voice') opts.voice = argv[++i];
+    else if (a === '--speed') opts.speed = num(a, argv[++i], 0.5);
+    else if (a === '--out') opts.out = argv[++i];
+    else if (a === '--command') opts.command = argv[++i];
+    else if (a === '--engine') opts.engine = argv[++i];
+    else if (a === '--reference') opts.reference = argv[++i];
+    else if (a === '--device') opts.device = argv[++i];
+    else if (a === '--fit') opts.fit = argv[++i];
+    else if (a === '--bbox') opts.bbox = argv[++i];
+    else if (a === '--highlight') opts.highlight = argv[++i];
+    else if (a === '--pin') opts.pin.push(argv[++i]);
+    else if (a === '--route') opts.route.push(argv[++i]);
+    else if (a === '--layer') opts.layer.push(argv[++i]);
+    else if (a === '--land') opts.land = argv[++i];
+    else if (a === '--detail') opts.detail = argv[++i];
+    else if (a === '--size') opts.size = argv[++i];
+    else if (a === '--countries') opts.countries = true;
     else if (a === '--from') opts.from = num(a, argv[++i], 0);
     else if (a === '--to') opts.to = num(a, argv[++i], 0);
     else if (a === '--fps') opts.fps = num(a, argv[++i], 1);
@@ -200,6 +240,94 @@ function font(opts) {
   console.log(`${meta.family} -> fonts/${slug}.css (${files.size} files, ${meta.license?.type ?? 'license in fonts/'})
 Link it: <link rel="stylesheet" href="../fonts/${slug}.css">
 Use it:  font-family: "${name}";  weights ${variable ? `${meta.weights[0]}-${meta.weights.at(-1)} (variable axes: ${axes.join(', ')})` : meta.weights.join(', ')}${meta.styles.includes('italic') ? ', italic' : ''}`);
+}
+
+async function mapCmd(opts) {
+  const { drawMap, parsePlace, countryNames } = await import('./lib/map.mjs');
+  if (opts.countries) {
+    console.log(countryNames(opts.detail ?? '50m').join('\n'));
+    return;
+  }
+  if (!opts.out) throw new ManifestError('map needs --out, for example --out assets/map-route.svg.');
+  const m = existsSync(opts.manifest) ? loadManifest(opts.manifest) : null;
+  const [width, height] = opts.size ? opts.size.split('x').map(Number) : [m?.width ?? 1920, m?.height ?? 1080];
+  if (!width || !height) throw new ManifestError(`map --size "${opts.size}" must be WxH, for example 1080x1920.`);
+  const list = (v) => (v ? v.split(',').map((x) => x.trim()).filter(Boolean) : []);
+  let bbox = null;
+  if (opts.bbox) {
+    bbox = list(opts.bbox).map(Number);
+    if (bbox.length !== 4 || bbox.some((v) => !Number.isFinite(v))) throw new ManifestError(`map --bbox "${opts.bbox}" must be four numbers: lon1,lat1,lon2,lat2.`);
+  }
+  try {
+    const { svg, pins, countries } = drawMap({
+      width, height, detail: opts.detail ?? '50m', fit: list(opts.fit), bbox, highlight: list(opts.highlight),
+      pins: opts.pin.map(parsePlace), routes: opts.route.map((r) => r.split('>').map(parsePlace)), land: opts.land, layers: opts.layer,
+    });
+    mkdirSync(dirname(resolve(opts.out)), { recursive: true });
+    writeFileSync(opts.out, svg);
+    console.log(`${opts.out} (${width}x${height}, ${countries} countries in view, ${(svg.length / 1024).toFixed(0)} KB)`);
+    console.log(`Inline it so its parts can move: <div class="map-wrap" data-inline="../${opts.out}"></div>`);
+    for (const p of pins) console.log(`  #${p.id} at ${p.at[0]},${p.at[1]} px`);
+    if (opts.route.length) console.log(`  routes: #route-1${opts.route.length > 1 ? ` … #route-${opts.route.length}` : ''} (animate with data-draw)`);
+    for (const id of svg.match(/id="layer-[^"]+"/g) ?? []) console.log(`  #${id.slice(4, -1)}`);
+  } catch (e) {
+    throw new ManifestError(e.message);
+  }
+}
+
+async function speakCmd(opts) {
+  const { speak } = await import('./lib/speak.mjs');
+  const arg = opts.rest.join(' ').trim();
+  if (!arg) throw new ManifestError('speak needs the script: a text file, or the words in quotes.');
+  const script = existsSync(arg) ? readFileSync(arg, 'utf8').trim() : arg;
+  const out = resolve(opts.out ?? 'assets/voiceover.wav');
+  mkdirSync(dirname(out), { recursive: true });
+  const { duration, engine } = await speak(script, out, {
+    voice: opts.voice ?? undefined, speed: opts.speed ?? undefined, model: opts.model ?? undefined, command: opts.command ?? undefined,
+    engine: opts.engine ?? undefined, reference: opts.reference ? resolve(opts.reference) : undefined, device: opts.device ?? undefined,
+  });
+  const txt = out.replace(/\.[^./]+$/, '.txt');
+  writeFileSync(txt, `${script}\n`);
+  const rel = (f) => relative(process.cwd(), f);
+  console.log(`${rel(out)} (${duration.toFixed(2)}s, ${engine}) and its script ${rel(txt)}
+Next: set "voiceover": { "file": "${rel(out)}", "script": "${rel(txt)}" } in video.json, then run transcribe.`);
+}
+
+async function transcribeCmd(m, opts) {
+  const { transcribe, wordsFile, narrations, alignScript, DEFAULT_MODEL } = await import('./lib/voice.mjs');
+  const list = opts.rest.length ? opts.rest.map((f) => ({ file: resolve(f), at: 0, where: 'file' })) : narrations(m);
+  if (opts.script) {
+    if (list.length !== 1) throw new ManifestError(`transcribe --script: ${list.length} narrations to read, and one script. Pass one FILE, or set "script" per narration in video.json.`);
+    if (!existsSync(opts.script)) throw new ManifestError(`transcribe --script: ${opts.script} does not exist.`);
+    list[0].script = resolve(opts.script);
+  }
+  if (!list.length) throw new ManifestError('transcribe: no narration to read. Set "voiceover" or a scene "audio" in video.json, or pass a file.');
+  for (const n of list) {
+    if (!existsSync(n.file)) throw new ManifestError(`transcribe: ${n.file} does not exist.`);
+    const { config } = await import('./lib/paths.mjs');
+    const t = await transcribe(n.file, { model: opts.model ?? config().asr?.model ?? DEFAULT_MODEL, language: opts.language ?? undefined });
+    // A known script replaces the recognized spelling: captions show the exact words, on the recognized timings.
+    // The recognized words stay in "heard", for a round trip against the script.
+    if (n.script) {
+      t.heard = t.words;
+      t.words = alignScript(t.words, readFileSync(n.script, 'utf8'));
+      t.script = n.script;
+    }
+    const out = wordsFile(m, n.file);
+    mkdirSync(dirname(out), { recursive: true });
+    writeFileSync(out, JSON.stringify(t, null, 1));
+    const clock = n.where === 'file' ? 'file' : 'video';
+    console.log(`${n.file} (${n.where}, ${t.duration.toFixed(2)}s, ${t.words.length} words${n.script ? `, words from ${n.script}` : ''}) -> ${out}`);
+    console.log(`  ${clock} seconds, start-end, word:`);
+    for (const w of t.words) console.log(`  ${(n.at + w.start).toFixed(2)}-${(n.at + w.end).toFixed(2)}  ${w.text}`);
+  }
+  // Every narration's words on one video timeline: the source for a data-captions track.
+  if (!opts.rest.length) {
+    const { spokenWords } = await import('./lib/voice.mjs');
+    const out = join(m.outDir, 'voice', 'words.json');
+    writeFileSync(out, JSON.stringify({ words: spokenWords(m).words.map((w) => ({ text: w.text, start: +w.start.toFixed(3), end: +w.end.toFixed(3) })) }, null, 1));
+    console.log(`video timeline -> ${out}  (for <div data-captions="../out/voice/words.json">)`);
+  }
 }
 
 function footage(opts) {
@@ -449,6 +577,8 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs }, op
   const total = scenes.reduce((sum, s) => sum + s.frames / m.fps, 0);
   const first = scenes[0].start;
   const voice = scenes.filter((s) => s.audio).map((s) => ({ file: s.audio, at: s.start - first + AUDIO_LEAD }));
+  // The video-wide voiceover plays at its video time, shifted when a scene subset starts later.
+  if (m.voiceover && m.voiceover.at + m.voiceover.duration > first) voice.push({ file: m.voiceover.file, at: m.voiceover.at - first });
   // Sound direction: the planned energy arc scales every effect, and each scene's transition sound joins the cues.
   const { SOUND_META, SPANNING } = await import('./lib/sfx.mjs');
   const { SPACES, energyAt, energyPoints, gainOf, impulseFile, toneOf, transitionCues } = await import('./lib/arc.mjs');
@@ -512,7 +642,9 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs }, op
     bedLog = { ...dir.bed, from: p.from, reveals: p.reveals, fragments: p.fragments, withoutBed: abOut };
     console.log(`bed: ${p.fragments.length} fragment(s) from the ${p.from} sound(s). Without the bed: ${abOut}`);
   }
-  const level = await muxAudio(joined, output, { voice, sfx, music: whole ? m.music : null, direction, bed }, total);
+  const fxStem = output === m.output && voice.length && sfx.length ? join(m.outDir, 'voice', 'effects.wav') : null;
+  if (fxStem) mkdirSync(dirname(fxStem), { recursive: true });
+  const level = await muxAudio(joined, output, { voice, sfx, music: whole ? m.music : null, direction, bed, fxStem }, total);
   if (level) {
     console.log(`loudness ${level.loudness.toFixed(1)} LUFS, true peak ${level.truePeak.toFixed(1)} dBTP (target ${level.target} LUFS, ceiling ${level.ceiling} dBTP)`);
     if (level.held) console.log(`  held ${(level.target - level.loudness).toFixed(1)} LU under the target: reaching it would cut the loudest moment's lead over the rest by more than ${level.leadLoss} dB and flatten the payoff. This is expected for a sparse effects-only mix: the file ships quieter so the payoff keeps its contrast. Raise the quiet cues only if the soft passages sound too faint. Do not lower the payoff to close the gap.`);
@@ -524,10 +656,18 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs }, op
   if (output === m.output) {
     const cueLog = sfx.map(({ sound, material, struck, src, intent, layer, motif, target, event, at, d, params, box, accents, file, sourceFile, volume, energy, tone, pan, space }) => ({ sound, material, struck, src, intent, layer, motif, target, event: Number(event.toFixed(4)), start: Number(at.toFixed(4)), d: Number(d.toFixed(4)), params, volume: Number(volume.toFixed(3)), energy: Number(energy.toFixed(3)), tone, pan, space, box, accents, file, sourceFile }));
     const cuts = local.slice(1).map((s) => Number(s.start.toFixed(4)));
-    writeFileSync(join(m.outDir, 'cues.json'), JSON.stringify({ video: output, width: m.width, height: m.height, fps: m.fps, cuts, plan, sound: { ...dir, key: key.name }, bed: bedLog, music: !!m.music, cues: cueLog, voice: voice.map((v) => ({ file: v.file, start: v.at })) }, null, 1));
+    writeFileSync(join(m.outDir, 'cues.json'), JSON.stringify({ video: output, width: m.width, height: m.height, fps: m.fps, cuts, plan, sound: { ...dir, key: key.name }, bed: bedLog, music: !!m.music, cues: cueLog, voice: voice.map((v) => ({ file: v.file, start: v.at })), fxStem: level?.fxStem ?? null, gainDb: level?.gainDb ?? null }, null, 1));
   }
   rmSync(work, { recursive: true, force: true });
   console.log(`wrote ${output} (${total.toFixed(2)}s, ${Math.round(m.width * scale)}x${Math.round(m.height * scale)} @ ${m.fps}fps)`);
+  // A full render also writes a small copy for sharing, next to the master.
+  if (!draft && output === m.output) {
+    const { shareCopy } = await import('./lib/encode.mjs');
+    const share = output.replace(/(\.[^./]+)?$/, '-share.mp4');
+    await shareCopy(output, share);
+    const mb = (f) => (statSync(f).size / 1e6).toFixed(1);
+    console.log(`wrote ${share} (${mb(share)} MB, for sharing; master ${mb(output)} MB)`);
+  }
 }
 
 // Splits an MJPEG byte stream into JPEG data URLs.
@@ -616,7 +756,9 @@ async function audit(m) {
   const fails = a.results.filter((r) => r.verdict === 'fail').length;
   const arcFails = a.arc.findings.filter((f) => f.level === 'fail').length;
   const checked = a.results.filter((r) => r.verdict !== 'skip').length;
-  console.log(`${png}\n${checked - fails}/${checked} cues in sync, ${fails} failing, ${arcFails} arc error(s), ${a.silent.length} big silent motion(s).`);
+  const masked = a.results.filter((r) => r.verdict === 'warn').length;
+  if (a.stem) console.log(`Effects judged on ${log.fxStem}: the narration is left out of their match and the energy arc.`);
+  console.log(`${png}\n${checked - fails}/${checked} cues in sync, ${fails} failing${a.stem ? `, ${masked} masked by the narration` : ''}, ${arcFails} arc error(s), ${a.silent.length} big silent motion(s).`);
   return fails || arcFails || tpFail ? 1 : 0;
 }
 
@@ -746,6 +888,11 @@ async function main() {
     console.log(HELP);
     return 0;
   }
+  if (cmd === 'doctor') {
+    const { doctor } = await import('./lib/doctor.mjs');
+    console.log(await doctor(resolve(opts.rest[0] ?? '.')));
+    return 0;
+  }
   if (cmd === 'init') {
     await init(opts.rest[0]);
     return 0;
@@ -758,11 +905,19 @@ async function main() {
     font(opts);
     return 0;
   }
+  if (cmd === 'map') {
+    await mapCmd(opts);
+    return 0;
+  }
+  if (cmd === 'speak') {
+    await speakCmd(opts);
+    return 0;
+  }
   if (cmd === 'footage') {
     footage(opts);
     return 0;
   }
-  if (!['check', 'still', 'render', 'sheet', 'beats', 'probe', 'audit', 'sounds'].includes(cmd)) throw new ManifestError(`Unknown command "${cmd}".\n\n${HELP}`);
+  if (!['check', 'still', 'render', 'sheet', 'beats', 'probe', 'audit', 'sounds', 'transcribe'].includes(cmd)) throw new ManifestError(`Unknown command "${cmd}".\n\n${HELP}`);
   if (cmd === 'beats') {
     await beats(opts);
     return 0;
@@ -770,7 +925,16 @@ async function main() {
   if (cmd === 'sounds') {
     return sounds();
   }
+  // transcribe reads any audio or video file without a project. Its words then go to ./out/voice.
+  if (cmd === 'transcribe' && opts.rest.length && !existsSync(opts.manifest)) {
+    await transcribeCmd({ outDir: resolve('out') }, opts);
+    return 0;
+  }
   const m = loadManifest(opts.manifest);
+  if (cmd === 'transcribe') {
+    await transcribeCmd(m, opts);
+    return 0;
+  }
   if (cmd === 'sheet') {
     await sheet(m);
     return 0;

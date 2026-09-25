@@ -51,7 +51,7 @@ async function seekTo(ms) {
 }
 
 // Prefers a browser already on the machine. MOTION_VIDEO_CHROME overrides the search.
-function systemBrowser() {
+export function systemBrowser() {
   const candidates = [
     process.env.MOTION_VIDEO_CHROME,
     'chromium', 'chromium-browser', 'google-chrome-stable', 'google-chrome',
@@ -79,7 +79,7 @@ const ANGLE = { linux: 'gl-egl', darwin: 'metal', win32: 'd3d11' }[process.platf
 const GPU_ARGS = ['--enable-gpu', '--ignore-gpu-blocklist', '--use-gl=angle', ...(ANGLE ? [`--use-angle=${ANGLE}`] : []), '--enable-gpu-rasterization'];
 let gpuVerdict = null;
 
-async function renderer(browser) {
+export async function renderer(browser) {
   const page = await browser.newPage();
   try {
     return await page.evaluate(() => {
@@ -133,9 +133,11 @@ export async function openScene(browser, m, scene, { scale = 1 } = {}) {
   });
   page.on('requestfailed', (r) => !/^(https?|wss?):/.test(r.url()) && errors.push(`request failed: ${r.url()} (${r.failure()?.errorText})`));
   await page.addInitScript(seedRandom);
-  await page.addInitScript((d) => {
+  await page.addInitScript(([d, start]) => {
+    // Where this scene sits on the video timeline, for anything timed in video seconds (a narration caption track).
+    window.__sceneStart = start;
     document.addEventListener('DOMContentLoaded', () => document.documentElement.style.setProperty('--scene-dur', `${d}s`));
-  }, scene.duration);
+  }, [scene.duration, scene.start ?? 0]);
   await page.goto(pathToFileURL(scene.file).href, { waitUntil: 'networkidle' });
   const failed = await page.evaluate(prepare);
   for (const f of failed) errors.push(`asset failed to load: ${f}`);

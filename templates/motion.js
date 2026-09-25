@@ -207,6 +207,91 @@
     return tl;
   }
 
+  // Word-synced captions from a narration transcript (video.mjs transcribe writes out/voice/words.json):
+  // <div class="captions" data-captions="../out/voice/words.json" [data-max="3"]></div>
+  // Words group into short lines (at most data-max words, breaking at punctuation and pauses). Each line shows from
+  // its first word until the next line. The word being spoken carries .on, and every spoken word .said. Timing is in
+  // video seconds: the renderer passes this scene's start, and data-start sets it for a preview in a browser tab.
+  // Inline SVG from a file (a map from video.mjs map, an illustration): <div data-inline="../assets/map.svg"></div>.
+  // Inlined parts can be animated like any element: a route draws with data-draw, a pin enters with .m.
+  // A child <i data-part="#route-1" data-draw data-at="1.2" data-sfx="whoosh"></i> gives its other attributes and
+  // classes to the part its selector names, once the file is inlined.
+  document.addEventListener('DOMContentLoaded', () => {
+    for (const el of document.querySelectorAll('[data-inline]')) {
+      const parts = [...el.querySelectorAll('[data-part]')];
+      waits.push(fetch(el.dataset.inline)
+        .then((r) => r.text())
+        .then((t) => {
+          el.innerHTML = t.replace(/^<\?xml[^>]*>\s*/, '');
+          for (const p of parts) {
+            const target = el.querySelector(p.dataset.part);
+            if (!target) {
+              console.error(`data-part: ${el.dataset.inline} has no part "${p.dataset.part}".`);
+              continue;
+            }
+            for (const a of p.attributes) {
+              if (a.name === 'data-part') continue;
+              if (a.name === 'class') target.classList.add(...p.classList);
+              else if (a.name === 'style') target.style.cssText += `;${a.value}`;
+              else target.setAttribute(a.name, a.value);
+            }
+          }
+        })
+        .catch(() => console.error(`data-inline: cannot read ${el.dataset.inline}.`)));
+    }
+  });
+
+  const tracks = [];
+  const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  function lines(words, max) {
+    const out = [];
+    let cur = [];
+    words.forEach((w, i) => {
+      cur.push(w);
+      const next = words[i + 1];
+      if (cur.length >= max || /[.,!?;:]$/.test(w.text) || !next || next.start - w.end > 0.35) {
+        out.push(cur);
+        cur = [];
+      }
+    });
+    out.forEach((l, i) => {
+      l.from = l[0].start - 0.05;
+      const next = out[i + 1];
+      l.to = Math.min(next ? next[0].start - 0.05 : Infinity, l[l.length - 1].end + 0.6);
+    });
+    return out;
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    for (const el of document.querySelectorAll('[data-captions]')) {
+      waits.push(fetch(el.dataset.captions)
+        .then((r) => r.json())
+        .then((j) => tracks.push({ el, lines: lines(j.words, Number(el.dataset.max ?? 3)), shown: null }))
+        .catch(() => console.error(`data-captions: cannot read ${el.dataset.captions}. Run video.mjs transcribe first.`)));
+    }
+  });
+  function captions(ms) {
+    for (const tr of tracks) {
+      const t = (window.__sceneStart ?? Number(tr.el.dataset.start ?? 0)) + ms / 1000;
+      const line = tr.lines.find((l) => t >= l.from && t < l.to) ?? null;
+      if (line !== tr.shown) {
+        tr.el.innerHTML = line ? `<span class="line-in">${line.map((w) => `<span class="w">${esc(w.text)}</span>`).join(' ')}</span>` : '';
+        tr.shown = line;
+      }
+      if (!line) continue;
+      const spans = tr.el.querySelectorAll('.w');
+      let current = -1;
+      line.forEach((w, k) => {
+        if (t >= w.start) current = k;
+      });
+      line.forEach((w, k) => {
+        spans[k].classList.toggle('said', k <= current);
+        spans[k].classList.toggle('on', k === current);
+      });
+      // A short pop as each line lands.
+      tr.el.style.setProperty('--pop', String(clamp((t - line.from) / 0.14)));
+    }
+  }
+
   window.__video = {
     on(fn) {
       hooks.push(fn);
@@ -228,6 +313,7 @@
     async seek(ms) {
       icons();
       split();
+      captions(ms);
       await footage(ms);
       counters(ms);
       typing(ms);

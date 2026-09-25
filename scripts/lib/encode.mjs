@@ -94,7 +94,9 @@ export async function concatSegments(segments, listPath, out) {
 // loudness gain, so it never shifts the foreground's level, and it ducks under every hit and word. With abOut,
 // the same mix without the bed is also written there, for a matched-level comparison.
 // Each sfx clip may carry `space` (0-1): its send into the shared room. Dry UI sounds send nothing.
-export async function muxAudio(video, out, { voice = [], sfx = [], music = null, direction = null, bed = null }, total) {
+// fxStem (optional): a path for the effects alone, as they sit in the mix (ducked, with their room), before the
+// loudness gain. Written only when voice is present: the audit judges effects on it, since speech dominates the mix.
+export async function muxAudio(video, out, { voice = [], sfx = [], music = null, direction = null, bed = null, fxStem = null }, total) {
   if (voice.length === 0 && sfx.length === 0 && !music) {
     await run(['-i', video, '-c', 'copy', '-movflags', '+faststart', out]).done;
     return null;
@@ -123,7 +125,10 @@ export async function muxAudio(video, out, { voice = [], sfx = [], music = null,
         const pan = c.pan ? `,pan=stereo|c0=${(Math.cos(a) * Math.SQRT2).toFixed(3)}*c0|c1=${(Math.sin(a) * Math.SQRT2).toFixed(3)}*c1` : '';
         // Each leg is padded and trimmed to the video's length before any amix. ffmpeg 9 deadlocks at random (about
         // 1 run in 3) when delayed legs meet an apad placed after the amix.
-        const shaped = `${tags[j]}adelay=delays=${Math.round(c.at * 1000)}:all=1,volume=${(c.volume ?? 1).toFixed(3)}${tone}${pan},apad,atrim=0:${total.toFixed(3)}`;
+        // A clip that started before this render's first frame (a video-wide voiceover under a scene render) is
+        // trimmed to where the render begins.
+        const lead = c.at < 0 ? `atrim=start=${(-c.at).toFixed(3)},asetpts=PTS-STARTPTS,` : '';
+        const shaped = `${tags[j]}${lead}adelay=delays=${Math.round(Math.max(0, c.at) * 1000)}:all=1,volume=${(c.volume ?? 1).toFixed(3)}${tone}${pan},apad,atrim=0:${total.toFixed(3)}`;
         if (withSend && c.space > 0) {
           graph.push(`${shaped},asplit=2[${leg}][${leg}r]`);
           graph.push(`[${leg}r]volume=${c.space.toFixed(3)}[${leg}s]`);
@@ -151,6 +156,7 @@ export async function muxAudio(video, out, { voice = [], sfx = [], music = null,
     graph.push(`[${fxBus.send}][ir]afir=dry=0:wet=1:gtype=peak,volume=${direction.room.wet.toFixed(3)},atrim=0:${total.toFixed(3)}[room]`);
     parts.push('[room]');
   }
+  const stem = fxStem && fx && voice.length ? [] : null;
   // Speech stays on top: music ducks hard under it, effects more gently, so a hit never masks a word.
   const keys = [music && vo ? 'voKeyM' : null, fx && vo ? 'voKeyF' : null].filter(Boolean);
   if (vo) {
@@ -172,6 +178,16 @@ export async function muxAudio(video, out, { voice = [], sfx = [], music = null,
     graph.push(`[${fx}][voKeyF]sidechaincompress=threshold=0.03:ratio=3:attack=10:release=250[fxduck]`);
     parts.push('[fxduck]');
   } else if (fx) parts.push(`[${fx}]`);
+  if (stem) {
+    // Each effects part feeds both the mix and the stem.
+    for (const p of parts.filter((x) => x === '[fxduck]' || x === '[room]')) {
+      const name = p.slice(1, -1);
+      graph.push(`${p}asplit=2[${name}m][${name}s]`);
+      parts[parts.indexOf(p)] = `[${name}m]`;
+      stem.push(`[${name}s]`);
+    }
+    graph.push(`${stem.join('')}amix=inputs=${stem.length}:normalize=0:duration=longest,atrim=0:${total.toFixed(3)}[fxstem]`);
+  }
   // The mix breathes in from silence and resolves out, instead of starting and stopping on a hard edge.
   const fadeIn = direction?.fadeIn ?? 0;
   const fadeOut = Math.min(direction?.fadeOut ?? 0, total / 2);
@@ -179,7 +195,8 @@ export async function muxAudio(video, out, { voice = [], sfx = [], music = null,
   graph.push(`${parts.join('')}amix=inputs=${parts.length}:normalize=0:duration=longest,atrim=0:${total.toFixed(3)}${edges.map((e) => `,${e}`).join('')}[aout]`);
   // Two-pass loudness: mix to a file, measure it, then apply one linear gain. One pass drifts on short clips.
   const mixed = `${out}.mix.wav`;
-  await run([...inputs, '-filter_complex', graph.join(';'), '-map', '[aout]', '-c:a', 'pcm_f32le', '-ar', '48000', mixed]).done;
+  const stemOut = stem ? ['-map', '[fxstem]', '-c:a', 'pcm_f32le', '-ar', '48000', fxStem] : [];
+  await run([...inputs, '-filter_complex', graph.join(';'), '-map', '[aout]', '-c:a', 'pcm_f32le', '-ar', '48000', mixed, ...stemOut]).done;
   // Loudness gating skips silence, so sparse effects alone would be pushed as loud as speech. They get a lower target.
   const targetI = vo || music ? -14 : -18;
   // Effects alone peak no higher than -6 dBTP: sharp clicks near full scale are painful. Voice and music keep -1.5.
@@ -287,7 +304,7 @@ export async function muxAudio(video, out, { voice = [], sfx = [], music = null,
   // The comparison without the bed keeps the delivered file's exact gain and limit: only the bed differs.
   if (hasBed && bed.abOut) await encode(bed.abOut, false);
   rmSync(mixed, { force: true });
-  return { loudness: got?.i, truePeak: got?.tp, target: targetI, ceiling: ceilingDb, leadLoss: LEAD_LOSS_DB, held: Number.isFinite(got?.i) && got.i < targetI - 0.5 };
+  return { loudness: got?.i, truePeak: got?.tp, target: targetI, ceiling: ceilingDb, leadLoss: LEAD_LOSS_DB, held: Number.isFinite(got?.i) && got.i < targetI - 0.5, gainDb, fxStem: stem ? fxStem : null };
 }
 
 // Integrated loudness (LUFS) and true peak (dBTP) of a file's audio, as delivered.
@@ -310,6 +327,13 @@ export async function tileImages(pngs, out, { cols = 4, width = 480 } = {}) {
   for (const p of pngs) if (!ff.stdin.write(p)) await new Promise((r) => ff.stdin.once('drain', r));
   ff.stdin.end();
   await done;
+}
+
+// A copy sized for sharing (chat apps, social uploads): the same picture and audio in a slow x264 encode. NVENC at
+// its master quality spends several times the bits a flat motion-graphics frame needs. Measured on a 65 s promo:
+// 36.2 MB master, 9.4 MB share copy at SSIM 0.997.
+export async function shareCopy(video, out) {
+  await run(['-i', video, '-map', '0', '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-maxrate', '6000k', '-bufsize', '12000k', '-tune', 'animation', '-pix_fmt', 'yuv420p', ...BT709, '-c:a', 'copy', '-movflags', '+faststart', out]).done;
 }
 
 export async function videoSheet(video, out, duration, { count = 16, cols = 4, width = 480 } = {}) {

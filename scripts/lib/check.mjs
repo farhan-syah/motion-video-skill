@@ -20,6 +20,11 @@ const SMALL_GRACE = 600; // Text may pass below MIN_TEXT this long (ms) during a
 // Runs in the page. Returns every visible run of text with its box, effective opacity and size.
 function collectText(short) {
   const out = [];
+  // Hit testing skips pointer-events: none (a caption track, an overlay), which would make whatever lies under that
+  // text read as covering it. Every element takes part in hit testing while the text is measured.
+  const hitAll = document.createElement('style');
+  hitAll.textContent = '* { pointer-events: auto !important; }';
+  document.head.append(hitAll);
   const vw = innerWidth;
   const vh = innerHeight;
   const label = (el) => {
@@ -152,8 +157,21 @@ function collectText(short) {
         }
       }
     }
+    // A solid plate behind the text (a pill, a card, a button) is its background: the pixels around the glyph box
+    // can lie outside the plate. The nearest painted ancestor counts when it is opaque, flat and covers the text.
+    let plate = null;
+    for (let e = el; e && e !== document.body; e = e.parentElement) {
+      const es = getComputedStyle(e);
+      const bg = es.backgroundColor.match(/[\d.]+/g)?.map(Number);
+      if (es.backgroundImage !== 'none') break;
+      if (!bg || (bg.length > 3 && bg[3] === 0)) continue;
+      const r = e.getBoundingClientRect();
+      if ((bg.length < 4 || bg[3] >= 0.95) && effOpacity(e) >= 0.95 && r.left <= full.l + 1 && r.right >= full.r - 1 && r.top <= full.t + 1 && r.bottom >= full.b - 1) plate = es.backgroundColor;
+      break;
+    }
     const text = texts.map((t) => t.textContent).join(' ').replace(/\s+/g, ' ').trim();
     out.push({
+      plate,
       id: idx,
       label: label(el),
       text: text.length > 40 ? `${text.slice(0, 40)}…` : text,
@@ -165,6 +183,8 @@ function collectText(short) {
       overlapOk: overlapOk(el),
       // UI texture: small real UI inside a device, read through a callout, headline or caption instead.
       texture: !!el.closest('[data-texture]'),
+      // A caption line is timed by the speech it shows, not by reading speed.
+      caption: !!el.closest('[data-captions]'),
       world,
       hud,
       underHud: underHud >= 3,
@@ -173,6 +193,8 @@ function collectText(short) {
       // Screen scale of the text from its transform chain: above 1 means a camera push or zoom enlarges it.
       scale: sy,
       color: cs.color,
+      // An outline stroke (a caption over footage) carries the contrast when the fill alone does not.
+      stroke: parseFloat(cs.webkitTextStrokeWidth) * sy >= 1 ? cs.webkitTextStrokeColor : null,
       clipText: cs.backgroundClip === 'text' || cs.webkitBackgroundClip === 'text',
       family: cs.fontFamily.split(',')[0].trim().replace(/^["']|["']$/g, ''),
       overflow: el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1 ? ['hidden', 'clip', 'scroll', 'auto'].includes(cs.overflowX) || ['hidden', 'clip', 'scroll', 'auto'].includes(cs.overflowY) : false,
@@ -183,6 +205,7 @@ function collectText(short) {
       })(),
     });
   }
+  hitAll.remove();
   return out;
 }
 
@@ -535,7 +558,7 @@ export async function checkScene(browser, m, scene, carry = null) {
       const need = Math.max(READ_MIN, it.words / READ_WPS) * 1000;
       // Text carried across a match cut keeps the reading time it already had at the end of the previous scene.
       const carried = s.firstSolid != null && s.firstSolid <= 2 * step ? (carry?.get(it.text) ?? 0) : 0;
-      if (!it.texture && s.visible > 0 && s.visible + carried + step < need) {
+      if (!it.texture && !it.caption && s.visible > 0 && s.visible + carried + step < need) {
         add('warn', s.firstSolid, `"${it.text}" is readable for ${fmt(s.visible)}. ${it.words} words need ${fmt(need)}.`, 'Hold it longer, or cut words.');
         // Kept so a parallel check can credit the reading time a match cut carries in from the previous scene.
         findings[findings.length - 1].read = { text: it.text, visible: s.visible, need, step, atStart: s.firstSolid != null && s.firstSolid <= 2 * step };
@@ -545,26 +568,94 @@ export async function checkScene(browser, m, scene, carry = null) {
     // Text still readable on the last sampled frame carries into the next scene's reading time.
     findings.carry = new Map([...seen.values()].filter((s) => s.lastSolid != null && s.lastSolid >= dur - 2 * step).map((s) => [s.it.text, s.visible]));
 
-    // Contrast, measured on the rendered frame where each text first sits fully opaque.
+    // Narration sync: text marked data-say must be on screen while its words are spoken.
+    const says = await sc.page.evaluate(() => [...document.querySelectorAll('[data-say]')].map((el, i) => {
+      el.dataset.sayId = String(i);
+      return { id: i, phrase: el.dataset.say || el.textContent.trim().replace(/\s+/g, ' ') };
+    }));
+    if (says.length) {
+      const { spokenWords, findPhrase } = await import('./voice.mjs');
+      const { words, missing } = spokenWords(m);
+      if (!words.length) {
+        add('error', null, `${says.length} element(s) carry data-say, but no narration is transcribed${missing.length ? ` (${missing.map((n) => n.where).join(', ')})` : ''}.`, missing.length ? 'Run transcribe, then check again.' : 'Set "voiceover" or a scene "audio" in video.json, or remove data-say.');
+      } else {
+        const T = 0.15;
+        for (const say of says) {
+          const hit = findPhrase(words, say.phrase, scene.start);
+          if (!hit) {
+            add('warn', null, `data-say "${say.phrase}" is not in the narration transcript.`, 'Match the spoken words, or set data-say to the exact phrase that is spoken.');
+            continue;
+          }
+          const a = hit.start - scene.start;
+          const b = hit.end - scene.start;
+          if (b < 0 || a > dur / 1000) {
+            add('error', null, `"${say.phrase}" is spoken at ${hit.start.toFixed(2)}s, outside this scene (${scene.start.toFixed(2)}-${(scene.start + dur / 1000).toFixed(2)}s).`, 'Move the text to the scene where it is spoken, or retime the scenes.');
+            continue;
+          }
+          // When the text is visible, stepped every 50 ms from 1 s before the words to their end.
+          let first = null;
+          let last = null;
+          for (let t = Math.max(0, a - 1); t <= Math.min(b, dur / 1000); t += 0.05) {
+            await sc.seek(t * 1000);
+            const shown = await sc.page.evaluate((id) => {
+              const el = document.querySelector(`[data-say-id="${id}"]`);
+              let o = 1;
+              for (let e = el; e; e = e.parentElement) o *= Number(getComputedStyle(e).opacity);
+              const r = el.getBoundingClientRect();
+              return o >= 0.5 && r.width > 0 && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight;
+            }, say.id);
+            if (shown) {
+              first ??= t;
+              last = t;
+            }
+          }
+          const at = (x) => `${(scene.start + x).toFixed(2)}s`;
+          if (first == null) {
+            // Where it does appear, if at all, so the fix names a time.
+            let later = null;
+            for (let t = b; t <= dur / 1000 && later == null; t += 0.1) {
+              await sc.seek(t * 1000);
+              if (await sc.page.evaluate((id) => {
+                const el = document.querySelector(`[data-say-id="${id}"]`);
+                let o = 1;
+                for (let e = el; e; e = e.parentElement) o *= Number(getComputedStyle(e).opacity);
+                return o >= 0.5;
+              }, say.id)) later = t;
+            }
+            add('error', a * 1000, `"${say.phrase}" is spoken ${at(Math.max(0, a))}-${at(b)}, but never on screen then${later != null ? `: it appears at ${at(later)}` : ''}.`, `Bring it on screen by the first word: set its --t to about ${(a - 0.2).toFixed(2)}s.`);
+          }
+          else {
+            if (first - a > T) add('warn', first * 1000, `"${say.phrase}" appears ${(first - a).toFixed(2)}s after it is spoken (words start at ${at(a)}).`, `Start its entrance by ${at(a)}: set its --t to about ${(a - 0.2).toFixed(2)}s.`);
+            if (b - last > T + 0.05) add('warn', last * 1000, `"${say.phrase}" leaves ${(b - last).toFixed(2)}s before its words end (at ${at(b)}).`, 'Hold it until the last word ends.');
+          }
+        }
+      }
+    }
+
+    // Contrast, measured on the rendered frame where each text first sits fully opaque, in the colors it has on that
+    // frame (a caption word changes color while it is spoken).
     const byTime = new Map();
     for (const s of seen.values()) {
       if (s.firstSolid == null || s.it.clipText || s.it.texture) continue;
-      const color = parseRgb(s.it.color);
-      if (!color || color.a < 1) continue;
       const t = Math.min(s.lastSolid, s.firstSolid + 500);
       const list = byTime.get(t) ?? [];
-      list.push({ s, color });
+      list.push({ s });
       byTime.set(t, list);
     }
     for (const [t, list] of byTime) {
       await sc.seek(t);
       const items = await sc.page.evaluate(collectText, short);
       const png = await sc.capture('png');
-      const live = list.map(({ s, color }) => ({ s, color, it: items.find((x) => x.id === s.it.id) })).filter((x) => x.it);
+      const live = list
+        .map(({ s }) => ({ s, it: items.find((x) => x.id === s.it.id) }))
+        .map((x) => ({ ...x, color: x.it && parseRgb(x.it.color) }))
+        .filter((x) => x.it && x.color && x.color.a >= 1);
       const bgs = await ringLuminance(decoder, png, live.map((x) => x.it.full));
       live.forEach(({ it, color }, i) => {
-        if (bgs[i] == null) return;
-        const r = ratio(lum(color.rgb), bgs[i]);
+        const bg = it.plate ? lum(parseRgb(it.plate).rgb) : bgs[i];
+        if (bg == null) return;
+        const stroke = it.stroke && parseRgb(it.stroke);
+        const r = Math.max(ratio(lum(color.rgb), bg), stroke && stroke.a >= 1 ? ratio(lum(stroke.rgb), bg) : 0);
         const min = it.px >= LARGE_TEXT ? CONTRAST_LARGE : CONTRAST_BODY;
         if (r < min) add('error', t, `Contrast ${r.toFixed(2)}:1 is below ${min}:1 for "${it.text}".`, 'Darken the background behind it or change the text color token.');
       });

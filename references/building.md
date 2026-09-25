@@ -173,6 +173,21 @@ A place makes a video feel made, not templated. Each layer is a full-frame eleme
 - **Cloud pass:** a cut hidden in a flight through cloud. End the scene on `.cloud-pass.cover`, start the next on `.cloud-pass.clear`, and push the stage with `--out:fly-out` and `--in:fly-in`.
 - **Float:** `.float` on a wrapper hovers a finished card or icon.
 
+### Maps
+
+`map` draws real geography from Natural Earth country outlines (public domain): an SVG sized to the frame.
+
+- **Frame it:** `--fit Malaysia,Singapore` frames countries. `--bbox 99.9,5.0,100.9,5.8` frames a box (lon1,lat1,lon2,lat2). With neither, it frames the pins and routes.
+- **Mark it:** `--highlight Malaysia` fills countries. `--pin "Penang@100.33,5.41"` adds a labeled pin, `--pin 100.33,5.41` an unlabeled one. `--route "London@-0.13,51.5>Singapore@103.8,1.35"` adds a great-circle arc. A route through more places (`A>B>C`) is one path that draws as one stroke. Both repeat.
+- **Detail:** `--detail 110m` for continents, `50m` (default) for countries, `10m` for islands and coastlines up close.
+- **Precision:** Natural Earth coasts are off by about 1–2 km even at `10m`. At city or island scale, a pier or a bridge end can land in the sea. There, supply precise GeoJSON (for example an OpenStreetMap export the user provides): `--land coast.geojson` replaces the outlines with its polygons, and `--layer bridge.geojson` draws its lines and areas as `#layer-1-<name>`.
+- **Use it:** `<div class="map-wrap" data-inline="../assets/map.svg"></div>` inlines the SVG, so its parts animate: `#route-1` draws, `#pin-penang` enters, `#c-malaysia` fills.
+- **Animate its parts:** a child `<i data-part="#route-1" data-draw data-at="1.2" data-sfx="…" data-sfx-intent="draw"></i>` of the wrapper gives its attributes and classes to that part once it is inlined. Style parts with `.map .route { … }`: the map's own styles yield to any scene rule.
+- **Pins:** the position sits on an outer group, so a scale or bounce on `#pin-…` stays on the spot. Labels are 28px.
+- **Colors:** tokens `--map-land`, `--map-hl`, `--map-border`, `--map-route`, `--map-pin`, `--map-label`, `--map-area`, `--map-line`.
+- **A zoom:** draw one map per level (world, country, island) and move between them with a push or a cut.
+- **Names:** `map --countries` lists every country name. Coordinates are longitude first. Take them from a reliable source, since a pin in the wrong place is a false fact.
+
 ### Type
 
 - **Glyph coverage:** a fetched `latin` subset covers Western European letters and common punctuation, not every symbol (`→`, `≥` and `✓` are missing from many). Add `--subset latin-ext`, or draw the symbol with an icon.
@@ -187,7 +202,7 @@ A place makes a video feel made, not templated. Each layer is a full-frame eleme
 |---|---|---|
 | User music | The user supplied a track | Set `music` in `video.json`, then run `beats`. Size scenes in `bars` so cuts land on downbeats. |
 | Motion effects | Default, with no music | `data-sfx="<sound>"` and a matching `data-sfx-intent` on the animated element. |
-| Voiceover | The user supplied narration | Per-scene `audio`. The scene length derives from it: 0.3s lead + audio + 0.5s tail. |
+| Voiceover | The user supplied narration or a TTS file | One file for the whole video: `"voiceover"` in `video.json`. Narration cut per scene: per-scene `audio`, and the scene length derives from it (0.3s lead + audio + 0.5s tail). Time everything to its words: `narration.md`. |
 | None | The user asks for silence | `"sfx": false` in `video.json`. |
 
 Never add music the user did not supply.
@@ -312,6 +327,10 @@ Tonal sounds share one key. A sting, a success chime and a pluck then never clas
 - **Tonic sounds** move to the nearest tonic of the key: `ding`, `success`, `shimmer`, `error`, `warning`, `sting`, `toggle-on`, `toggle-off`, `hit`, `drone`. Chords take a minor third in a minor key.
 - **Scale sounds** follow size, then snap to the key's pentatonic scale: `pop`, `tap`, `blip`, `spring`, `downer`, `pluck`, `drop`, `jelly`. Any two of them form a consonant interval.
 - **Setting it:** `"sound.key": "auto"` (default) takes the key of `music`, or C major without music. A name such as `"D minor"` sets it outright. A relative major and minor (C major and A minor) share one pentatonic scale. Detection that picks either one still sounds in key.
+
+### Narration and captions
+
+Voiceover, text to speech, word timing, caption tracks and sync checks: `narration.md`.
 
 ### User sounds
 

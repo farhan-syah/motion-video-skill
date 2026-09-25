@@ -8,6 +8,8 @@
 - **Runtime:** Node 20+. Playwright stalls under Bun 1.3, so `bun video.mjs` re-runs itself under `node`.
 - **Browser:** `$MOTION_VIDEO_CHROME`, else the first of `chromium`, `chromium-browser`, `google-chrome-stable` or `google-chrome` on PATH, else Chrome or Chromium in its default macOS or Windows location. With none, it falls back to Playwright's build (`bunx playwright install chromium-headless-shell`).
 - **Also required:** `ffmpeg` and `ffprobe` on PATH.
+- **Settings:** `~/.config/motion-video/config.json` holds the model folder, the TTS engine and the speech recognition model (`narration.md`).
+- **Models:** `speak` and `transcribe` use a model already on disk first: the model folder, then the standard Hugging Face cache (`$HF_HUB_CACHE`, `$HF_HOME/hub`, `~/.cache/huggingface/hub`). Otherwise they download it once, into `$MOTION_VIDEO_MODELS`, else the `"models"` folder in `~/.config/motion-video/config.json` (`{ "models": "/path/to/models" }`), else `~/.cache/motion-video/models`. Point it at a folder you keep, so models survive a cache clean.
 - **Checks:** `check`, `sounds` and `audit` use Node and ffmpeg. Python is not required.
 - **Sound effects:** synthesized on first use into `~/.cache/motion-video/sfx/` (under the home folder on every platform) (`$XDG_CACHE_HOME` when set), as `<sound>-v<variant>-<hash>.wav`. The cache is disposable: a deleted file rebuilds on the next render.
 - **GPU:** Chromium draws on the GPU through ANGLE (EGL on Linux, Metal on macOS, Direct3D on Windows) when WebGL reports a hardware renderer. Otherwise it falls back to software. `MOTION_VIDEO_GPU=0` forces software.
@@ -17,14 +19,18 @@
 
 | Command | Does | Exit |
 |---|---|---|
+| `doctor [DIR]` | Sweeps before directing: CPU, memory, GPU drawing and encoding, ffmpeg, Node, Bun, Chromium, the speech runtime, models and TTS engine, and the media and documents in DIR | 0 |
 | `init <dir>` | Creates the project from templates | 0, or 2 if the directory is not empty |
 | `font "FAMILY" [--subset S,…]` | Fetches a Fontsource family into `fonts/`, variable when it exists, and writes `fonts/<family>.css` | 0, or 2 on an unknown family |
 | `lib NAME…` | Copies a browser library into `lib/` and prints how to load it. `gsap`, `three`, `lottie`. | 0, or 2 on an unknown name |
+| `speak TEXT\|FILE [--engine kokoro\|voxcpm] [--voice V] [--reference WAV] [--speed S] [--model ID \| --command T] [--device cpu] [--out WAV]` | Narration from a script: Kokoro by default (local, English), VoxCPM2 (30 languages, NVIDIA GPU with 8 GB), a transformers.js model, or any TTS command. Writes the WAV and its script beside it. See `narration.md`. | 0 |
+| `transcribe [FILE…] [--model M] [--language L] [--script TXT]` | Word-level timestamps from a local Whisper model, for the manifest's narration or given files. A given file needs no project: its words go to `./out/voice/`. With a script, the words come from it, and the recognized words stay in `heard`. Writes `out/voice/<name>.words.json` and the video timeline `out/voice/words.json`. Installs the speech runtime once, on first use. | 0, or 2 with no narration to read |
+| `map --out SVG [--fit A,B \| --bbox …] [--highlight A,B] [--pin L@lon,lat]… [--route L@lon,lat>lon,lat>…]… [--land GEOJSON] [--layer GEOJSON]… [--detail 10m\|50m\|110m] [--size WxH] [--countries]` | Draws a map from Natural Earth outlines, or from precise GeoJSON. See `building.md`, Maps. | 0, or 2 on an unknown country |
 | `footage FILE [--name N] [--from S] [--to S] [--fps F] [--width W]` | Extracts a clip into `assets/N/` as JPEG frames and prints the `<img data-frames>` tag | 0, or 2 if ffmpeg cannot read the file |
 | `beats [FILE] [--start S]` | Writes `out/beats.json`: bpm, beats, downbeats, bar energy, hits and the track's key, in video time. Prints a `music.start` on a downbeat. | 0 |
 | `check [--scene S]` | Lints scenes in parallel. Prints ERROR/WARN lines, each with a fix. With `--scene`, also writes that scene's still sheet to `out/stills/`. | 1 on any error |
 | `still [--scene S] [T…]` | Writes PNGs at T seconds, or one 8-frame sheet per scene with no T | 0 |
-| `render [--scene S] [--draft] [--scale N] [--jobs N] [--force]` | Runs `check` unless a clean check already covers the same files, then renders. A full render ends with `audit` and `out/sheet.png`. Captured frames are cached by what they show: after a sound-only edit (`data-sfx*`, `sound`, `energy`, `in`), no frame is captured again. Stops on check errors unless `--force`. | 1 on check errors or a failing cue |
+| `render [--scene S] [--draft] [--scale N] [--jobs N] [--force]` | Runs `check` unless a clean check already covers the same files, then renders. A full render also writes `<output>-share.mp4`, a copy about a quarter the size for chat apps and social uploads, then ends with `audit` and `out/sheet.png`. Captured frames are cached by what they show: after a sound-only edit (`data-sfx*`, `sound`, `energy`, `in`), no frame is captured again. Stops on check errors unless `--force`. | 1 on check errors or a failing cue |
 | `sheet` | Writes `out/sheet.png`: 16 frames from the rendered video | 0 |
 | `probe SELECTOR [T] [--scene S]` | Prints the on-screen center and box of matching elements at T seconds | 0 |
 | `audit` | Checks timing, cue intent, impact overlaps, sound shape and presence in the final mix. Writes `out/audit.png`. | 1 on any failing cue |
@@ -57,7 +63,9 @@ Dotted names are nested objects: `sound.palette` is `"sound": { "palette": "wood
 | `scenes[].file` | path | — | Basename must be unique |
 | `scenes[].bars` | number | — | Length in bars from `out/beats.json`. Run `beats` first. |
 | `scenes[].duration` | seconds | — | Used when there is no music. Set one of `bars`, `duration` or `audio`. |
-| `scenes[].audio` | path | — | Voiceover. Length derives from it when `bars` and `duration` are absent. |
+| `voiceover` | path, or `{ "file", "start", "script" }` | — | One narration for the whole video, starting at `start` video seconds (default 0). It must end within the video. `script`: the text it reads, for exact caption words. |
+| `scenes[].script` | path | — | The text a scene's `audio` reads. |
+| `scenes[].audio` | path | — | Narration cut per scene. Length derives from it when `bars` and `duration` are absent. |
 | `scenes[].energy` | 0–1, or `[[seconds, energy], …]` | 0.6 | Planned intensity. One number holds for the scene. A curve of points in scene seconds shapes it inside: tease, hit, drop, hit. Sets level (−4 dB at 0.3, +3.5 dB at 1.0) and tone (darker when low, brighter when high). Ramped across cuts. |
 | `scenes[].in` | `whoosh` \| `swoosh` \| `reverse` \| `riser` | — | Transition sound pre-lapped across this scene's cut. Not on the first scene. |
 | `scenes[].inVol`, `scenes[].inDur` | number | 0.8, recipe | Transition level (0–4) and length in seconds (0.2–4) |

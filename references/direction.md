@@ -2,7 +2,7 @@
 
 **Product** in these references means whatever the video is about: an app, a service, a course, an event, a place, a dataset, a person's work.
 
-A plain brief gives a plain video. The quality comes from direction written before any code. Expand every brief into `direction.md` (shape: `templates/direction.md`). Do not ask the user to write it. Ask only when the product itself cannot be found.
+A plain brief gives a plain video. The quality comes from direction written before any code. Expand every brief into `direction.md` (shape: `templates/direction.md`). Do not ask the user to write it. Ask only the few questions that change the video, and only when they are open (`SKILL.md`, step 3).
 
 ## 0. Gather the facts
 

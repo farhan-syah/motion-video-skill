@@ -13,19 +13,22 @@ Tool: `node <skill-dir>/scripts/video.mjs <command>`, run from the project direc
 
 ## Workflow
 
-1. **Gather facts.** Start from what the user supplied: the brief, screenshots, designs, files. When that leaves gaps, research the product itself (its repo, docs, site, app). Write the facts with their sources before anything else (`references/direction.md`, §0). Every claim on screen comes from those facts. Ask only when the product cannot be found.
-2. **Direct.** Run `init <dir>` in the user's working directory, never inside `<skill-dir>`. Then fill `<dir>/direction.md` per `references/direction.md` and `references/styles.md`. Choose the concept first: three options with different story shapes and compositions (`references/concepts.md`), then the strongest. Design the world too: the place, the objects and the graphic system, not only the motion. Give the user a 5-line summary, then continue without waiting.
-3. **Sound.** Pick one:
+1. **Sweep.** Run `doctor` in the user's folder. It reports the CPU, GPU drawing and encoding, the speech engines and models, and the media and documents already there. Plan with what exists: a software-only machine keeps 3D and blur light, an English-only voice never narrates another language.
+2. **Gather facts.** Start from what the user supplied: the brief, screenshots, designs, files. When that leaves gaps, research the product itself (its repo, docs, site, app). Write the facts with their sources before anything else (`references/direction.md`, §0). Every claim on screen comes from those facts.
+3. **Ask, when it matters.** When an answer would change the video, ask the user in one short message: at most five questions, each with the default you will use. Ask about what the facts and the sweep cannot settle: the purpose and audience, where it plays (format, length), the voice (their recording, TTS, which language, or none), what must appear (logo, assets, a call to action), and the tone. Skip it when the brief already answers these, when the user asks for a one-shot or no questions, or when no user is there to answer (a scheduled or delegated run). Then use the defaults and name them in the summary.
+4. **Direct.** Run `init <dir>` in the user's working directory, never inside `<skill-dir>`. Then fill `<dir>/direction.md` per `references/direction.md` and `references/styles.md`. Choose the concept first: three options with different story shapes and compositions (`references/concepts.md`), then the strongest. Design the world too: the place, the objects and the graphic system, not only the motion. Give the user a 5-line summary, then continue without waiting.
+5. **Sound.** Pick one:
    - **User music:** run `beats`, set `--beat` in `base.css`, and size scenes in `bars`.
+   - **Voiceover or TTS:** use the user's narration. With only a script, or when the user asks for narration, make it with `speak`. Set `voiceover` (with its `script`), run `transcribe`, and time beats and cues to the printed word times. Show speech as text with a `data-captions` track, and mark other lines that repeat it with `data-say`, so `check` holds them to the speech. See `references/narration.md`.
    - **Motion effects:** used when no music is supplied. Give each cue a visible-action `data-sfx-intent` from `references/building.md`. `data-material="paper"` can supply the intent. Set `sound.palette` and `sound.key` from the sonic concept.
    - **None:** used when the user asks for silence.
 
    Never add music the user did not supply. Direct the soundtrack's shape before cueing single sounds. Write the sonic concept first: material, motif, mood shift. Give each scene an `energy` in `video.json`, as one value or as a curve that teases, hits, drops and hits again. Plan transition sounds per cut. See `references/direction.md`.
-4. **Build.** Write the scenes per `references/building.md`. Rebuild reference designs as live HTML components. Never animate a flat screenshot of a design you can rebuild.
-5. **Check and look, per scene.** After writing or editing a scene, run `check --scene N`. It lints the scene and writes its still sheet in a few seconds. Open the sheet with Read, and fix what fails `references/craft.md`. Fix every finding of a pass in one edit before running again. A warning stays only for a deliberate choice.
-6. **Render.** Run `render --draft` once every scene passes, and again after each fix: it captures at half size in JPEG, about a third faster. Run the full `render` once, when the draft passes review. It checks only files that changed since the last clean `check`, renders, runs the sound audit, and writes `out/sheet.png`. With a `sound.bed`, it also writes a copy without the bed. Compare the two, or tell the user to.
-7. **Review.** Open `out/sheet.png` and, with effects, `out/audit.png`. Compare each cue's intent with its thumbnail. Fix each failing cue and false intent label, then render again. Listen to the mix when audio playback is available. Numeric checks cannot judge every timbre. Report when listening was unavailable.
-8. **Deliver.** Report the output path.
+6. **Build.** Write the scenes per `references/building.md`. Rebuild reference designs as live HTML components. Never animate a flat screenshot of a design you can rebuild.
+7. **Check and look, per scene.** After writing or editing a scene, run `check --scene N`. It lints the scene and writes its still sheet in a few seconds. Open the sheet with Read, and fix what fails `references/craft.md`. Fix every finding of a pass in one edit before running again. A warning stays only for a deliberate choice.
+8. **Render.** Run `render --draft` once every scene passes, and again after each fix: it captures at half size in JPEG, about a third faster. Run the full `render` once, when the draft passes review. It checks only files that changed since the last clean `check`, renders, runs the sound audit, and writes `out/sheet.png`. With a `sound.bed`, it also writes a copy without the bed. Compare the two, or tell the user to.
+9. **Review.** Open `out/sheet.png` and, with effects, `out/audit.png`. Compare each cue's intent with its thumbnail. Fix each failing cue and false intent label, then render again. Listen to the mix when audio playback is available. Numeric checks cannot judge every timbre. Report when listening was unavailable.
+10. **Deliver.** Report both output paths: the master and the `-share.mp4` copy for sending.
 
 ## Non-negotiables
 
@@ -45,6 +48,7 @@ Tool: `node <skill-dir>/scripts/video.mjs <command>`, run from the project direc
 | Choosing the concept: story shapes, beats, compositions, craft devices, design vocabulary | `references/concepts.md` |
 | Choosing or executing a visual style | `references/styles.md` |
 | Writing scenes, the kit (icons, atmospheres, UI parts, leader lines), 3D, footage and libraries, the seek contract, the camera | `references/building.md` |
+| Voiceover, text to speech, word timing, captions | `references/narration.md` |
 | Finding an icon name | `references/icons.txt` (grep it) |
 | Thresholds, and the visual review of sheets | `references/craft.md` |
 | Commands, flags, `video.json` fields, setup errors | `references/cli.md` |

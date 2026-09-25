@@ -156,6 +156,11 @@ function motionAround(m, fps, t, floor, reach = 0.6) {
 export async function auditVideo(cueLog) {
   const { video, width, height, fps, cues, cuts = [] } = cueLog;
   const [samples, frames] = await Promise.all([decode(video), grayFrames(video)]);
+  // Under narration, speech dominates the mix: effects are judged on their own stem (as mixed: ducked, in their
+  // room), and each one is also checked for how far the speech buries it.
+  const stem = cueLog.fxStem && existsSync(cueLog.fxStem) ? await decode(cueLog.fxStem) : null;
+  const fxSamples = stem ?? samples;
+  const stemGain = cueLog.gainDb ?? 0;
   const { env, rms } = features(samples);
   const heard = onsets(env, rms);
   const sx = MW / width;
@@ -266,15 +271,25 @@ export async function auditVideo(cueLog) {
     if (r.sound === 'type') continue;
     if (!waves.has(r.file)) waves.set(r.file, await decode(r.file));
     const wave = waves.get(r.file);
-    r.similarity = sourceSimilarity(samples, wave, r.start);
-    const available = Math.max(0, Math.min(wave.length, samples.length - Math.round(r.start * SR)));
+    r.similarity = sourceSimilarity(fxSamples, wave, r.start);
+    const available = Math.max(0, Math.min(wave.length, fxSamples.length - Math.round(r.start * SR)));
     const threshold = sourceMatchThreshold(available);
     if (r.similarity < threshold) {
       r.verdict = 'fail';
       r.notes.push(`Sound source match is ${r.similarity.toFixed(2)} in the rendered mix, under ${threshold.toFixed(2)}. Check masking or volume.`);
       if (r.onsetMissing) r.notes.push('No audible onset at its start either.');
-    } else if (r.onsetMissing) {
+    } else if (r.onsetMissing && !stem) {
       r.notes.push('No separate onset (another sound is still ringing), but the source is present in the mix.');
+    }
+    // Masking: the effect's level against the whole mix over its first 300 ms. More than 12 dB under, speech buries it.
+    if (stem && r.verdict !== 'fail') {
+      const a = r.start * SR;
+      const b = (r.start + Math.min(0.3, Math.max(0.08, r.d ?? 0.3))) * SR;
+      const under = levelDb(samples, a, b) - (levelDb(stem, a, b) + stemGain);
+      if (under > 12) {
+        r.verdict = 'warn';
+        r.notes.push(`Plays ${under.toFixed(0)} dB under the narration here, so the voice masks it. Move it into a pause between phrases, raise data-sfx-vol, or drop it.`);
+      }
     }
   }
 
@@ -290,7 +305,7 @@ export async function auditVideo(cueLog) {
   }
   silent.sort((a, b) => b.strength - a.strength);
 
-  return { results, heard, silent: silent.slice(0, 8), rms, global, noise, fps, cuts, duration: frames.length / fps, arc: auditArc(cueLog, samples, frames.length / fps) };
+  return { results, heard, silent: silent.slice(0, 8), rms, global, noise, fps, cuts, duration: frames.length / fps, arc: auditArc(cueLog, fxSamples, frames.length / fps, samples), stem: !!stem };
 }
 
 // RMS level in dBFS of a sample range.
@@ -333,7 +348,8 @@ export function rankCorrelation(a, b) {
 
 // Checks the soundtrack's shape against its direction: loudness per scene follows the planned energy, the payoff
 // scene is the loudest, the mix starts and ends by breathing (no hard edge), and no effect is cut off by the end.
-export function auditArc(cueLog, samples, duration) {
+// samples: the effects (their stem under narration). mix: the delivered soundtrack, for its edges.
+export function auditArc(cueLog, samples, duration, mix = samples) {
   const findings = [];
   const plan = cueLog.plan ?? [];
   // A scene's level is its loudest 400 ms: the moment a listener remembers. An average would reward busy scenes.
@@ -361,9 +377,9 @@ export function auditArc(cueLog, samples, duration) {
   }
   findings.push(...contrastFindings(plan, samples, transitions));
   // Edges: the first and last 40 ms must sit well under the programme level, or the track starts or stops on a cut.
-  const body = levelDb(samples, 0, samples.length);
-  const head = levelDb(samples, 0, 0.04 * SR);
-  const tail = levelDb(samples, samples.length - 0.04 * SR, samples.length);
+  const body = levelDb(mix, 0, mix.length);
+  const head = levelDb(mix, 0, 0.04 * SR);
+  const tail = levelDb(mix, mix.length - 0.04 * SR, mix.length);
   if (body > -70 && head > body - 6) findings.push({ level: 'fail', msg: `The soundtrack starts on a hard edge (first 40 ms at ${head.toFixed(1)} dB against ${body.toFixed(1)} dB overall). Set "sound.fadeIn".` });
   if (body > -70 && tail > body - 6) findings.push({ level: 'fail', msg: `The soundtrack stops on a hard edge (last 40 ms at ${tail.toFixed(1)} dB against ${body.toFixed(1)} dB overall). Set "sound.fadeOut", or hold the end card longer.` });
   // An effect whose dry sound runs past the end is cut, not resolved.
@@ -543,7 +559,7 @@ for(let r0=0;r0<D.duration;r0+=ROW){
   g.setLineDash([4,4]);g.strokeStyle='#94a3b8';for(const t of D.cuts){if(t<r0||t>=r0+ROW)continue;g.beginPath();g.moveTo(X(t),0);g.lineTo(X(t),180);g.stroke();g.fillStyle='#94a3b8';g.fillText('cut',X(t)+3,20);}g.setLineDash([]);
   for(const t of D.silent){if(t<r0||t>=r0+ROW)continue;g.fillStyle='#dc2626';g.fillText('▲',X(t)-4,176);}
   let lane=0;
-  for(const q of D.cues){if(q.t<r0||q.t>=r0+ROW)continue;const col=q.v==='ok'?'#16a34a':q.v==='fail'?'#dc2626':'#6b7280';
+  for(const q of D.cues){if(q.t<r0||q.t>=r0+ROW)continue;const col=q.v==='ok'?'#16a34a':q.v==='fail'?'#dc2626':q.v==='warn'?'#d97706':'#6b7280';
     g.strokeStyle=col;g.lineWidth=2;g.beginPath();g.moveTo(X(q.t),10);g.lineTo(X(q.t),170);g.stroke();g.lineWidth=1;
     g.fillStyle=col;const y=90+(lane++%3)*14;g.fillText(q.s+'/'+q.intent+(q.d!=null&&q.v!=='skip'?(q.d>=0?' +':' ')+q.d+'ms':''),X(q.t)+3,y);}
 }
