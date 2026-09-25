@@ -1,0 +1,264 @@
+/* motion-video base: tokens, stage, type scale, motion system. Change tokens, not the machinery. */
+
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/inter.woff2") format("woff2");
+  font-weight: 400 800;
+  font-display: block;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/jetbrains-mono.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: block;
+}
+
+:root {
+  /* Palette: neutral placeholders, not a look. The frame is dark here and light with class="light" on <html>;
+     direction.md decides which. Replace every token with the palette in direction.md, sampled from the brand or
+     derived from the product's world. Keep text on --bg at 4.5:1 or better. */
+  --bg: #0f1012;
+  --bg-2: #1b1c20;
+  --fg: #f4f4f5;
+  --muted: #9b9da4;
+  --accent: #c8c9ce;
+  --accent-2: #8e9098;
+  /* Accent for text: the accent pushed toward the ink side so small text keeps 4.5:1. */
+  --accent-ink: var(--accent);
+
+  /* Size unit: 1% of the short side, so one scale serves 16:9, 9:16 and 1:1. */
+  --u: 1vmin;
+  --fs-hero: calc(var(--u) * 11);
+  --fs-title: calc(var(--u) * 7.4);
+  --fs-sub: calc(var(--u) * 4.4);
+  --fs-body: calc(var(--u) * 3.4);
+  --fs-label: calc(var(--u) * 2.7);
+  /* Placeholder families, not a choice: direction.md picks the type, and `video.mjs font` fetches it. */
+  --font: "Inter", sans-serif;
+  --mono: "JetBrains Mono", monospace;
+
+  /* Easing. Entrances decelerate, exits accelerate. */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-emph: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-in: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --ease-inout: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: linear(0, 0.009, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 19.4%, 1.067, 1.099 24.3%, 1.108 26%, 1.1 28.4%, 1.061 33.7%, 1.017 39.7%, 0.992 45.1%, 0.984 51%, 0.995 63.7%, 1.001 80.4%, 1);
+
+  /* Timing. */
+  --dur-in: 0.8s;
+  --dur-out: 0.45s;
+  --stagger: 0.09s;
+
+  /* Music grid. Set --beat from out/beats.json; place cues with calc(var(--beat) * n). */
+  --beat: 0.5s;
+  --bar: calc(var(--beat) * 4);
+}
+
+/* Light world: add class="light" to <html>. Grain turns dark and multiplies. */
+/* :where keeps this at the specificity of :root, so a scene's own :root { … } palette wins over these defaults. */
+:root:where(.light) {
+  --bg: #f5f5f7;
+  --bg-2: #ffffff;
+  --fg: #111318;
+  --muted: #5b6272;
+  --accent: #3b3d44;
+  --accent-2: #6d7079;
+  --accent-ink: color-mix(in oklab, var(--accent), black 28%);
+  --grain-blend: multiply;
+  --grain-opacity: 0.05;
+}
+
+/* Avatars: initials on gradients dark enough for white text at 4.5:1. Pick .g1–.g6. */
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  width: calc(var(--u) * 6);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 700;
+  font-size: calc(var(--u) * 3);
+  letter-spacing: 0.02em;
+  box-shadow: 0 0 0 calc(var(--u) * 0.35) var(--bg-2), 0 calc(var(--u) * 0.6) calc(var(--u) * 1.6) rgb(0 0 0 / 0.18);
+}
+.avatar + .avatar { margin-left: calc(var(--u) * -1.4); }
+.g1 { background: linear-gradient(135deg, #1e40af, #4338ca); }
+.g2 { background: linear-gradient(135deg, #9d174d, #be123c); }
+.g3 { background: linear-gradient(135deg, #065f46, #047857); }
+.g4 { background: linear-gradient(135deg, #92400e, #b45309); }
+.g5 { background: linear-gradient(135deg, #5b21b6, #7c3aed); }
+.g6 { background: linear-gradient(135deg, #155e75, #0e7490); }
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+body {
+  position: relative;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font);
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+}
+
+/* Film grain. It also dithers gradient banding out of the 8-bit encode. */
+body::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: var(--grain-opacity, 0.08);
+  mix-blend-mode: var(--grain-blend, overlay);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.2 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+:root.light body::after {
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1.2 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+
+/* Background layer: two slow-moving light pools, so no frame is dead. */
+.bg {
+  position: absolute;
+  inset: -10%;
+  background:
+    radial-gradient(40% 50% at 20% 25%, color-mix(in oklab, var(--accent) 22%, transparent), transparent 70%),
+    radial-gradient(45% 55% at 85% 80%, color-mix(in oklab, var(--accent-2) 18%, transparent), transparent 70%),
+    linear-gradient(160deg, var(--bg-2), var(--bg));
+  animation: bg-drift var(--scene-dur, 10s) linear both;
+}
+@keyframes bg-drift {
+  from { translate: -2% -1%; scale: 1.02; }
+  to { translate: 2% 1%; scale: 1.08; }
+}
+
+/* Graphics-safe area: 5% per edge (EBU R 95). Resting text lives inside it. */
+.safe {
+  position: absolute;
+  inset: 5vh 5vw;
+  display: grid;
+  align-content: center;
+  gap: calc(var(--u) * 2.4);
+}
+
+/* Two layers, chosen per element.
+   .stage holds the world: the motif, props, and text that belongs to them (mark it data-world). The camera moves it.
+   .hud holds screen text: headline, chapter label, caption card. It never drifts, and chapter scenes share its slot. */
+.stage {
+  position: absolute;
+  inset: 0;
+}
+.hud {
+  position: absolute;
+  inset: 5vh 5vw;
+  display: grid;
+  align-content: start;
+  gap: calc(var(--u) * 1.6);
+}
+
+/* Slow push-in for a held static image: a screenshot, photo or preview. Put it on a wrapper, never on a .m element or
+   the .hud, and not on every scene: when content moves, the camera holds. */
+.drift {
+  animation: drift var(--scene-dur, 10s) linear both;
+}
+@keyframes drift {
+  from { scale: 1; }
+  to { scale: 1.04; }
+}
+
+/* Type scale. */
+.hero { font-size: var(--fs-hero); font-weight: 800; line-height: 0.98; letter-spacing: -0.035em; }
+.title { font-size: var(--fs-title); font-weight: 750; line-height: 1.04; letter-spacing: -0.028em; }
+.sub { font-size: var(--fs-sub); font-weight: 500; line-height: 1.2; letter-spacing: -0.012em; color: var(--muted); }
+.body { font-size: var(--fs-body); font-weight: 450; line-height: 1.35; }
+.label { font-size: var(--fs-label); font-weight: 600; line-height: 1.2; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-ink); }
+.mono { font-family: var(--mono); font-size: var(--fs-body); }
+.num { font-variant-numeric: tabular-nums; }
+.accent { color: var(--accent-ink); }
+
+/* Icons: <i data-icon="name"></i>, filled in by motion.js from icons.js. Sized by font-size, colored by color. */
+[data-icon] { display: inline-block; width: 1em; height: 1em; line-height: 0; vertical-align: -0.14em; flex: none; }
+[data-icon] svg { width: 100%; height: 100%; fill: var(--icon-fill, none); stroke: currentColor; stroke-width: var(--icon-stroke, 2); stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+.hero, .title, .sub, .body { margin: 0; max-width: 22ch; text-wrap: balance; }
+.sub, .body { max-width: 38ch; }
+
+/*
+ * Motion system. Put class "m" on an element and set:
+ *   --in    entrance keyframes: rise drop left right fade zoom pop blur reveal wipe draw grow-x grow-y
+ *           (world.css adds pop-in drop-in; ui.css adds press slam)
+ *   --t     entrance start in seconds from scene start
+ *   --i     stagger index; each step adds --stagger
+ *   --out   exit keyframes: fade-out sink-out rise-out blur-out zoom-out wipe-out
+ *   --out-t exit start; default: the exit ends 0.1s before the scene cut
+ *   --dur-out exit length; default 0.45s
+ */
+/* Per-element motion inputs do not inherit: a child .m inside a staggered parent keeps its own timing. */
+@property --in { syntax: "*"; inherits: false; }
+@property --out { syntax: "*"; inherits: false; }
+@property --t { syntax: "*"; inherits: false; }
+@property --i { syntax: "*"; inherits: false; }
+@property --in-dur { syntax: "*"; inherits: false; }
+@property --in-ease { syntax: "*"; inherits: false; }
+@property --out-t { syntax: "*"; inherits: false; }
+.m {
+  animation:
+    var(--in, none) var(--in-dur, var(--dur-in)) var(--in-ease, var(--ease-out)) calc(var(--t, 0s) + var(--i, 0) * var(--stagger)) both,
+    var(--out, none) var(--dur-out) var(--ease-in) var(--out-t, calc(var(--scene-dur, 3600s) - var(--dur-out) - 0.1s)) forwards;
+}
+/* Inline elements ignore transforms. A moving word must be an inline-block. */
+/* :where keeps the specificity of .m, so a kit class (.chip, .badge) keeps its own display. */
+:where(span, a, b, i, em, strong).m { display: inline-block; }
+/* Pieces from data-split (motion.js). */
+.split-word { display: inline-block; white-space: nowrap; }
+.split-mask { display: inline-block; overflow: clip; overflow-clip-margin: 0.12em; vertical-align: top; }
+/* A line mask: wrap text in <span class="line"><span class="m" style="--in:reveal">…</span></span>. */
+.line { display: block; overflow: clip; overflow-clip-margin: 0.12em; }
+.line > * { display: block; }
+
+@keyframes rise { from { opacity: 0; translate: 0 0.45em; } }
+@keyframes drop { from { opacity: 0; translate: 0 -0.45em; } }
+@keyframes left { from { opacity: 0; translate: calc(var(--u) * -6) 0; } }
+@keyframes right { from { opacity: 0; translate: calc(var(--u) * 6) 0; } }
+@keyframes fade { from { opacity: 0; } }
+@keyframes zoom { from { opacity: 0; scale: 0.92; } }
+@keyframes pop { from { opacity: 0; scale: 0.5; } }
+@keyframes blur { from { opacity: 0; filter: blur(0.35em); scale: 1.04; } }
+@keyframes reveal { from { translate: 0 110%; } }
+@keyframes wipe { from { clip-path: inset(0 100% 0 0); } }
+/* stroke-opacity hides the round cap's dot before the stroke starts. Sound timing reads opacity, not stroke-opacity. */
+@keyframes draw { 0% { stroke-dashoffset: 1; stroke-opacity: 0; } 0.1% { stroke-opacity: 1; } }
+@keyframes grow-x { from { scale: 0 1; } }
+@keyframes grow-y { from { scale: 1 0; } }
+
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes sink-out { to { opacity: 0; translate: 0 0.35em; } }
+@keyframes rise-out { to { opacity: 0; translate: 0 -0.35em; } }
+@keyframes blur-out { to { opacity: 0; filter: blur(0.3em); } }
+@keyframes zoom-out { to { opacity: 0; scale: 1.06; } }
+@keyframes wipe-out { to { clip-path: inset(0 0 0 100%); } }
+
+/* Caret for data-type text (motion.js). */
+[data-type][data-state="typing"]::after {
+  content: "";
+  display: inline-block;
+  width: 0.07em;
+  height: 1em;
+  margin-left: 0.04em;
+  vertical-align: -0.12em;
+  background: currentColor;
+}
+
+/* SVG strokes for --in:draw need pathLength="1". */
+.stroke { fill: none; stroke-dasharray: 1; stroke-linecap: round; }
+.grow-x-origin { transform-origin: left center; }
+.grow-y-origin { transform-origin: center bottom; }

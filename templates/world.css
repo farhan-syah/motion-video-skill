@@ -1,0 +1,279 @@
+/* motion-video world kit: 3D stage and camera in plain CSS. Needs base.css.
+ * Orthographic (isometric diorama): <div class="viewport">. The camera looks down: --pitch tilts, --yaw orbits.
+ * Perspective (keynote product shots): <div class="viewport persp">. The camera faces upright objects:
+ * --pitch tilts them back, --yaw turns them. Keep both within ±20deg so text stays readable. */
+
+/* Camera angles and zoom are registered, so @keyframes interpolate them smoothly. */
+@property --yaw { syntax: "<angle>"; inherits: true; initial-value: -45deg; }
+@property --pitch { syntax: "<angle>"; inherits: true; initial-value: 60deg; }
+@property --zoom { syntax: "<number>"; inherits: true; initial-value: 1; }
+@property --pan-x { syntax: "<length-percentage>"; inherits: true; initial-value: 0px; }
+@property --pan-y { syntax: "<length-percentage>"; inherits: true; initial-value: 0px; }
+
+:root {
+  /* Toon shading: every face derives from one base color. */
+  --shade-side: 14%;
+  --shade-front: 26%;
+  --ink: #1f2a37;
+  --shadow: rgb(15 23 42 / 0.18);
+}
+
+/*
+ * Viewport: fills the frame and holds the camera. No perspective, so the projection is orthographic.
+ * Animate the camera with @keyframes on --yaw, --pitch, --zoom, --pan-x, --pan-y on .cam.
+ */
+.viewport {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+/* Perspective rig for upright objects (devices, cards): --pitch tilts back, --yaw turns left/right. */
+.viewport.persp {
+  perspective: var(--persp, 2400px);
+}
+.viewport.persp > .cam {
+  --pitch: 8deg;
+  --yaw: -14deg;
+  transform: translate(var(--pan-x), var(--pan-y)) scale(var(--zoom)) rotateX(var(--pitch)) rotateY(var(--yaw));
+}
+.cam {
+  transform-style: preserve-3d;
+  transform: translate(var(--pan-x), var(--pan-y)) scale(var(--zoom)) rotateX(var(--pitch)) rotateZ(var(--yaw));
+}
+
+/* The world plane. Children sit on it with --x, --y (plane position) and --z (height). Units: --u. */
+.world {
+  position: relative;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+}
+/* Every wrapper inside the world keeps 3D, so a .m animation wrapper never flattens a prop.
+ * opacity < 1, filter and overflow still flatten an element: keep them off prop wrappers. */
+.world * {
+  transform-style: preserve-3d;
+}
+.at {
+  position: absolute;
+  left: calc(var(--x, 0) * var(--u));
+  top: calc(var(--y, 0) * var(--u));
+  transform-style: preserve-3d;
+  transform: translateZ(calc(var(--z, 0) * var(--u))) rotateZ(var(--rot, 0deg));
+}
+
+/* Ground disc with a soft rim. --r is the radius in --u. */
+.disc {
+  position: absolute;
+  width: calc(var(--r, 40) * 2 * var(--u));
+  height: calc(var(--r, 40) * 2 * var(--u));
+  left: calc(var(--r, 40) * -1 * var(--u));
+  top: calc(var(--r, 40) * -1 * var(--u));
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--disc, #e8ecf1) 92%, color-mix(in oklab, var(--disc, #e8ecf1), black 8%) 100%);
+  box-shadow: 0 0 0 calc(var(--u) * 1.2) color-mix(in oklab, var(--disc, #e8ecf1), black 10%);
+}
+
+/* Contact shadow under a prop. Put it as the first child of an .at, sized with --w and --d. */
+.shadow {
+  position: absolute;
+  width: calc(var(--w, 10) * var(--u) * 1.3);
+  height: calc(var(--d, 10) * var(--u) * 1.3);
+  left: calc(var(--w, 10) * var(--u) * -0.15);
+  top: calc(var(--d, 10) * var(--u) * -0.15);
+  border-radius: 40%;
+  background: radial-gradient(closest-side, var(--shadow), transparent);
+  filter: blur(calc(var(--u) * 0.8));
+}
+
+/*
+ * Cuboid: <div class="cube" style="--w:12; --d:8; --h:3; --c:#14b8a6"><i></i><i></i><i></i><i></i><i></i></div>
+ * Faces in order: top, front (+y), right (+x), back, left. --w on x, --d on y, --h on z.
+ * Put content (a screen, a label) inside the top face or the front face.
+ */
+.cube {
+  position: absolute;
+  width: calc(var(--w) * var(--u));
+  height: calc(var(--d) * var(--u));
+  transform-style: preserve-3d;
+}
+.cube > i {
+  position: absolute;
+  display: block;
+  font-style: normal;
+  background: var(--c);
+  backface-visibility: hidden;
+  outline: 1px solid transparent;
+}
+.cube > i:nth-child(1) {
+  inset: 0;
+  transform: translateZ(calc(var(--h) * var(--u)));
+  background: var(--top, var(--c));
+}
+.cube > i:nth-child(2) {
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: calc(var(--h) * var(--u));
+  transform-origin: bottom;
+  transform: rotateX(-90deg);
+  background: color-mix(in oklab, var(--c), black var(--shade-front));
+}
+.cube > i:nth-child(3) {
+  right: 0;
+  top: 0;
+  width: calc(var(--h) * var(--u));
+  height: 100%;
+  transform-origin: right;
+  transform: rotateY(90deg);
+  background: color-mix(in oklab, var(--c), black var(--shade-side));
+}
+.cube > i:nth-child(4) {
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: calc(var(--h) * var(--u));
+  transform-origin: top;
+  transform: rotateX(90deg);
+  background: color-mix(in oklab, var(--c), black var(--shade-front));
+}
+.cube > i:nth-child(5) {
+  left: 0;
+  top: 0;
+  width: calc(var(--h) * var(--u));
+  height: 100%;
+  transform-origin: left;
+  transform: rotateY(-90deg);
+  background: color-mix(in oklab, var(--c), black var(--shade-side));
+}
+
+/* A flat card standing upright on the plane, facing the camera's default yaw. */
+.stand {
+  position: absolute;
+  transform-origin: bottom center;
+  transform: rotateX(-90deg) rotateY(var(--face, 45deg));
+  backface-visibility: hidden;
+}
+
+/*
+ * Laptop: a base slab plus a lid hinged on the base's back edge, leaning back 12deg.
+ * <div class="laptop" style="--w:24; --d:16">
+ *   <div class="cube"><i></i><i></i><i></i><i></i><i></i></div>
+ *   <div class="lid"><div class="screen"> rebuilt UI here </div></div>
+ * </div>
+ * --w, --d: base size in --u. --lid: lid height (default: --d). --body: shell color.
+ */
+.laptop {
+  position: absolute;
+  width: calc(var(--w) * var(--u));
+  height: calc(var(--d) * var(--u));
+  transform-style: preserve-3d;
+}
+.laptop > .cube {
+  --h: 1.2;
+  --c: var(--body, #cbd5e1);
+}
+.laptop > .lid {
+  position: absolute;
+  left: 0;
+  top: calc(var(--lid, var(--d)) * var(--u) * -1);
+  width: 100%;
+  height: calc(var(--lid, var(--d)) * var(--u));
+  padding: calc(var(--u) * 0.8);
+  border-radius: calc(var(--u) * 1.2);
+  background: color-mix(in oklab, var(--body, #cbd5e1), black 55%);
+  transform-origin: bottom center;
+  transform: translateZ(calc(var(--u) * 1.2)) rotateX(-78deg);
+}
+.laptop > .lid > .screen {
+  width: 100%;
+  height: 100%;
+  border-radius: calc(var(--u) * 0.5);
+  overflow: clip;
+  background: var(--surface, #fff);
+  color: var(--fg);
+}
+
+/* A billboard counter-rotates the camera so text and icons face the viewer at any yaw. */
+.billboard {
+  transform-style: preserve-3d;
+  transform: rotateZ(calc(var(--yaw) * -1)) rotateX(calc(var(--pitch) * -1));
+}
+
+.viewport.persp .billboard {
+  transform: rotateY(calc(var(--yaw) * -1)) rotateX(calc(var(--pitch) * -1));
+}
+
+/* Bounce pop for props. Use with .m: --in:pop-in. */
+@keyframes pop-in {
+  0% { scale: 0; }
+  55% { scale: 1.12; }
+  75% { scale: 0.96; }
+  90% { scale: 1.02; }
+  100% { scale: 1; }
+}
+/* Drop onto the plane from above. Use with .m: --in:drop-in.
+ * 3D entrances animate only transforms: an opacity or filter animation stays applied after it ends
+ * (fill: both) and flattens the whole prop, so upright faces vanish. */
+@keyframes drop-in {
+  0% { translate: 0 0 calc(var(--u) * 30); }
+  60% { translate: 0 0 0; }
+  78% { translate: 0 0 calc(var(--u) * 2.5); }
+  100% { translate: 0 0 0; }
+}
+/* Idle bob keeps a finished prop alive. Put it on a wrapper, not on the .m element. */
+@keyframes bob {
+  0%, 100% { translate: 0 0 0; }
+  50% { translate: 0 0 calc(var(--u) * 0.8); }
+}
+.bob { animation: bob 2.4s var(--ease-inout) infinite; animation-delay: var(--bob-t, 0s); }
+
+/*
+ * Coin stack: discs piled on the plane. One <i> per coin, up to 12. --r: coin radius in --u. --coin: its color.
+ * <div class="coins" style="--r:3"><i></i><i></i><i></i><i></i><i></i></div>
+ * Put a symbol on the top coin: <i><b>RM</b></i>, and give that <b> .billboard to face the camera.
+ */
+.coins {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+.coins > i {
+  position: absolute;
+  width: calc(var(--r, 3) * 2 * var(--u));
+  height: calc(var(--r, 3) * 2 * var(--u));
+  left: calc(var(--r, 3) * -1 * var(--u));
+  top: calc(var(--r, 3) * -1 * var(--u));
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font: 800 calc(var(--r, 3) * var(--u) * 0.7) / 1 var(--font);
+  font-style: normal;
+  color: color-mix(in oklab, var(--coin, #f2b632), black 45%);
+  background: radial-gradient(closest-side, var(--coin, #f2b632) 70%, color-mix(in oklab, var(--coin, #f2b632), white 25%) 76%, color-mix(in oklab, var(--coin, #f2b632), black 8%) 84%);
+  box-shadow: 0 0 0 calc(var(--u) * 0.18) color-mix(in oklab, var(--coin, #f2b632), black 30%);
+  transform: translateZ(calc(var(--k, 0) * var(--u) * 0.7));
+}
+.coins > i:nth-child(2) { --k: 1; }
+.coins > i:nth-child(3) { --k: 2; }
+.coins > i:nth-child(4) { --k: 3; }
+.coins > i:nth-child(5) { --k: 4; }
+.coins > i:nth-child(6) { --k: 5; }
+.coins > i:nth-child(7) { --k: 6; }
+.coins > i:nth-child(8) { --k: 7; }
+.coins > i:nth-child(9) { --k: 8; }
+.coins > i:nth-child(10) { --k: 9; }
+.coins > i:nth-child(11) { --k: 10; }
+.coins > i:nth-child(12) { --k: 11; }
+
+/* Ring pad: a lit platform ring for a hero prop or a mascot. Place it like .disc, with --r and --glow. */
+.pad {
+  position: absolute;
+  width: calc(var(--r, 12) * 2 * var(--u));
+  height: calc(var(--r, 12) * 2 * var(--u));
+  left: calc(var(--r, 12) * -1 * var(--u));
+  top: calc(var(--r, 12) * -1 * var(--u));
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--glow, var(--accent)), white 50%) 0 58%, var(--glow, var(--accent)) 66%, color-mix(in oklab, var(--glow, var(--accent)), transparent 60%) 76%, transparent 100%);
+  box-shadow: 0 0 calc(var(--u) * 4) color-mix(in oklab, var(--glow, var(--accent)), transparent 30%);
+}

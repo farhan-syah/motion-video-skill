@@ -1,0 +1,254 @@
+/* motion-video atmosphere kit: skies, clouds, ground, studio, light, glass and depth. Needs base.css.
+ * Every color is a token with a default derived from the palette. Set the tokens per scene for each world:
+ * a day sky, a deep night, a meadow horizon, a pale studio. One video can move through several atmospheres. */
+
+:root {
+  --sky-top: color-mix(in oklab, var(--accent), var(--bg) 35%);
+  --sky-low: color-mix(in oklab, var(--accent), white 70%);
+  --cloud: #ffffff;
+  --cloud-shade: color-mix(in oklab, var(--sky-top), white 55%);
+  --ground: color-mix(in oklab, var(--accent-2), var(--bg) 30%);
+  --ground-top: color-mix(in oklab, var(--ground), white 25%);
+  --haze: color-mix(in oklab, var(--sky-low), white 40%);
+  --studio: var(--bg-2);
+  --glow: var(--accent);
+}
+
+/* Layers fill the frame behind the stage. Put them before <main class="stage">. */
+.sky,
+.studio,
+.stars,
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Sky: a vertical gradient from --sky-top to --sky-low, with a soft sun or moon light at --sun-x, --sun-y. */
+.sky {
+  background:
+    radial-gradient(40% 35% at var(--sun-x, 70%) var(--sun-y, 20%), color-mix(in oklab, var(--haze), transparent 30%), transparent 70%),
+    linear-gradient(180deg, var(--sky-top), var(--sky-low));
+}
+
+/*
+ * Cloud: <i class="cloud" style="--x:30%; --y:40%; --s:40; --dx:6"></i>
+ * --s: width in --u. --dx: drift over the scene in --u (negative drifts left). --soft: edge blur in --u.
+ * Put clouds in front of the stage too, bigger and softer, so the camera reads as flying through them.
+ */
+.cloud {
+  position: absolute;
+  left: var(--x, 50%);
+  top: var(--y, 50%);
+  width: calc(var(--s, 36) * var(--u));
+  aspect-ratio: 2.1;
+  translate: -50% -50%;
+  pointer-events: none;
+  background:
+    radial-gradient(22% 36% at 36% 42%, var(--cloud) 60%, transparent 100%),
+    radial-gradient(26% 46% at 55% 34%, var(--cloud) 60%, transparent 100%),
+    radial-gradient(20% 32% at 74% 50%, var(--cloud) 60%, transparent 100%),
+    radial-gradient(20% 30% at 22% 58%, var(--cloud) 60%, transparent 100%),
+    radial-gradient(46% 26% at 50% 66%, var(--cloud-shade) 55%, transparent 100%);
+  filter: blur(calc(var(--u) * var(--soft, 0.7)));
+  animation: cloud-drift var(--scene-dur, 10s) linear both;
+}
+@keyframes cloud-drift {
+  from { translate: -50% -50%; }
+  to { translate: calc(-50% + var(--dx, 4) * var(--u)) -50%; }
+}
+
+/*
+ * Cloud pass: a cut hidden in a flight through cloud. The outgoing scene ends on .cloud-pass.cover, the next scene
+ * starts on .cloud-pass.clear. Put it last in <body>, above the HUD.
+ *   Outgoing: <div class="cloud-pass cover"></div>   covers over the last --pass-dur of the scene
+ *   Incoming: <div class="cloud-pass clear"></div>   clears over the first --pass-dur
+ * Pair it with a push on the stage (scale up into the cover, settle out of it) so the camera flies through.
+ */
+.cloud-pass {
+  position: absolute;
+  inset: -30%;
+  pointer-events: none;
+  z-index: 50;
+  background:
+    radial-gradient(30% 30% at 50% 50%, var(--cloud) 55%, transparent 100%),
+    radial-gradient(28% 34% at 22% 30%, var(--cloud) 50%, transparent 100%),
+    radial-gradient(30% 32% at 78% 28%, var(--cloud) 50%, transparent 100%),
+    radial-gradient(30% 32% at 24% 74%, var(--cloud) 50%, transparent 100%),
+    radial-gradient(32% 34% at 76% 72%, var(--cloud) 50%, transparent 100%),
+    radial-gradient(60% 60% at 50% 50%, color-mix(in oklab, var(--cloud), transparent 20%) 40%, transparent 100%);
+  filter: blur(calc(var(--u) * 3));
+}
+.cloud-pass.cover {
+  animation: cloud-cover var(--pass-dur, 0.7s) var(--ease-in) var(--t, calc(var(--scene-dur, 3600s) - var(--pass-dur, 0.7s))) both;
+}
+.cloud-pass.clear {
+  animation: cloud-clear var(--pass-dur, 0.7s) var(--ease-out) var(--t, 0s) both;
+}
+@keyframes cloud-cover {
+  from { opacity: 0; scale: 0.5; }
+  to { opacity: 1; scale: 2.2; }
+}
+@keyframes cloud-clear {
+  from { opacity: 1; scale: 2.2; }
+  to { opacity: 0; scale: 4; }
+}
+/* Camera push through the cover and out of the clear. Put on .stage: --out:fly-out on the outgoing scene, --in:fly-in on the next. */
+@keyframes fly-out { to { scale: 1.6; filter: blur(calc(var(--u) * 1.2)); } }
+@keyframes fly-in { from { scale: 0.7; filter: blur(calc(var(--u) * 1.2)); } }
+
+/* Horizon: curved ground rising from the bottom, a meadow or a planet edge. --horizon: the ground's top, as % of height. */
+.horizon {
+  position: absolute;
+  left: -60%;
+  right: -60%;
+  top: var(--horizon, 70%);
+  height: 200%;
+  pointer-events: none;
+  border-radius: 50% 50% 0 0 / calc(var(--u) * var(--curve, 16)) calc(var(--u) * var(--curve, 16)) 0 0;
+  background: linear-gradient(180deg, var(--ground-top), var(--ground) 12%);
+  box-shadow: 0 calc(var(--u) * -2) calc(var(--u) * 7) var(--haze);
+}
+
+/* Studio: a seamless sweep, a wall curving into a lit floor. --floor: where the floor starts, as % of height. */
+.studio {
+  background:
+    radial-gradient(50% 30% at 50% calc(var(--floor, 72%) + 6%), color-mix(in oklab, var(--studio), white 35%), transparent 70%),
+    linear-gradient(180deg,
+      color-mix(in oklab, var(--studio), black 8%) 0%,
+      var(--studio) calc(var(--floor, 72%) - 12%),
+      color-mix(in oklab, var(--studio), white 12%) var(--floor, 72%),
+      color-mix(in oklab, var(--studio), black 14%) 100%);
+}
+
+/* Pedestal: a cylinder for a product to stand on. --w width, --h height in --u. --pedestal: its color. */
+.pedestal {
+  --c: var(--pedestal, color-mix(in oklab, var(--studio), white 20%));
+  position: relative;
+  width: calc(var(--w, 34) * var(--u));
+  height: calc(var(--h, 9) * var(--u));
+  border-radius: 0 0 50% 50% / 0 0 calc(var(--w, 34) * var(--u) * 0.06) calc(var(--w, 34) * var(--u) * 0.06);
+  background: linear-gradient(90deg,
+    color-mix(in oklab, var(--c), black 34%),
+    color-mix(in oklab, var(--c), black 6%) 28%,
+    color-mix(in oklab, var(--c), black 14%) 62%,
+    color-mix(in oklab, var(--c), black 40%));
+  box-shadow: 0 calc(var(--u) * 3) calc(var(--u) * 5) rgb(0 0 0 / 0.16);
+}
+.pedestal::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(var(--w, 34) * var(--u) * -0.06);
+  height: calc(var(--w, 34) * var(--u) * 0.12);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--c), white 30%), color-mix(in oklab, var(--c), white 8%));
+  box-shadow: inset 0 calc(var(--u) * -0.3) 0 color-mix(in oklab, var(--c), black 10%);
+}
+/* A product on the pedestal sits in .pedestal > .on-top, centered on the top face. */
+.pedestal > .on-top {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + var(--w, 34) * var(--u) * 0.01);
+  translate: -50% 0;
+}
+
+/* Stars for a night sky: five tiled layers with unrelated periods, so no grid shows, drifting slowly. */
+.stars {
+  inset: -5%;
+  background:
+    radial-gradient(circle at 13% 27%, rgb(255 255 255 / 0.95) 0.07vmin, transparent 0.2vmin) 0 0 / 29vmin 23vmin,
+    radial-gradient(circle at 71% 64%, rgb(255 255 255 / 0.7) 0.06vmin, transparent 0.17vmin) 7vmin 3vmin / 19vmin 31vmin,
+    radial-gradient(circle at 42% 83%, rgb(255 255 255 / 0.5) 0.05vmin, transparent 0.14vmin) 3vmin 11vmin / 13vmin 17vmin,
+    radial-gradient(circle at 88% 12%, rgb(255 255 255 / 0.45) 0.05vmin, transparent 0.13vmin) 11vmin 5vmin / 37vmin 11vmin,
+    radial-gradient(circle at 27% 51%, rgb(255 255 255 / 0.35) 0.04vmin, transparent 0.12vmin) 5vmin 9vmin / 7vmin 23vmin;
+  animation: stars-drift var(--scene-dur, 10s) linear both;
+}
+@keyframes stars-drift { to { translate: calc(var(--u) * -3) 0; } }
+
+/* Dot grid: a halftone patch that fades out at its edges, for a corner of a flat backdrop. Place with left/top/right/bottom.
+   --s: width in --u. --dot: dot color. */
+.dot-grid {
+  position: absolute;
+  width: calc(var(--u) * var(--s, 28));
+  aspect-ratio: 1.4;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--dot, color-mix(in oklab, var(--fg), transparent 78%)) calc(var(--u) * 0.16), transparent calc(var(--u) * 0.22)) 0 0 / calc(var(--u) * 1.5) calc(var(--u) * 1.5);
+  mask: radial-gradient(closest-side, black 30%, transparent);
+}
+
+/* Edge darkening that pulls the eye to the center. */
+.vignette {
+  z-index: 40;
+  background: radial-gradient(75% 75% at 50% 50%, transparent 55%, rgb(0 0 0 / var(--vignette, 0.35)));
+}
+
+/* Glow: a soft light pool behind a subject. --x --y place it, --s sizes it in --u. Add .pulse to breathe. */
+.glow {
+  position: absolute;
+  left: var(--x, 50%);
+  top: var(--y, 50%);
+  width: calc(var(--s, 50) * var(--u));
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(closest-side, var(--glow), transparent);
+  opacity: var(--glow-a, 0.5);
+  filter: blur(calc(var(--u) * 2));
+}
+.glow.pulse { animation: glow-pulse 2.6s var(--ease-inout) infinite; }
+@keyframes glow-pulse { 50% { scale: 1.12; opacity: calc(var(--glow-a, 0.5) * 1.35); } }
+
+/* Rays: light beams turning slowly behind a logo or a reveal. Size and place it like .glow. */
+.rays {
+  position: absolute;
+  left: var(--x, 50%);
+  top: var(--y, 50%);
+  width: calc(var(--s, 120) * var(--u));
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  pointer-events: none;
+  background: repeating-conic-gradient(from 0deg, color-mix(in oklab, var(--glow), transparent 70%) 0deg 5deg, transparent 5deg 18deg);
+  mask: radial-gradient(closest-side, black 10%, transparent 100%);
+  animation: rays-turn var(--scene-dur, 10s) linear both;
+}
+@keyframes rays-turn { to { rotate: 24deg; } }
+
+/*
+ * Glass: a frosted panel that blurs what lies behind it. Put .m on the glass element itself, never on a wrapper:
+ * opacity or a filter on an ancestor limits what the blur can see. --glass-a: fill strength (0.1–0.4).
+ * .glass.dark: a smoked panel for a night or a busy backdrop.
+ */
+.glass {
+  position: relative;
+  border-radius: var(--radius, calc(var(--u) * 2.2));
+  background: linear-gradient(135deg, rgb(255 255 255 / var(--glass-a, 0.28)), rgb(255 255 255 / calc(var(--glass-a, 0.28) * 0.35)));
+  backdrop-filter: blur(calc(var(--u) * 2.2)) saturate(1.5);
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.4),
+    inset 0 calc(var(--u) * 0.2) 0 rgb(255 255 255 / 0.5),
+    0 calc(var(--u) * 2) calc(var(--u) * 6) rgb(0 0 0 / 0.14);
+}
+.glass.dark {
+  background: linear-gradient(135deg, rgb(12 14 22 / calc(var(--glass-a, 0.28) + 0.2)), rgb(12 14 22 / calc(var(--glass-a, 0.28) + 0.05)));
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.14),
+    inset 0 calc(var(--u) * 0.2) 0 rgb(255 255 255 / 0.12),
+    0 calc(var(--u) * 2) calc(var(--u) * 6) rgb(0 0 0 / 0.3);
+}
+
+/*
+ * Depth of field for flat layers. .far: behind the subject, soft and a little faded. .near: in front of the lens,
+ * large and very soft. --blur overrides the amount in --u. A rack focus is --in:focus-in on the new subject and
+ * --out:focus-out on the old one. A filter flattens 3D: never put these on a prop inside .world.
+ */
+.far { filter: blur(calc(var(--u) * var(--blur, 0.5))); opacity: 0.85; }
+.near { filter: blur(calc(var(--u) * var(--blur, 1.4))); }
+@keyframes focus-in { from { filter: blur(calc(var(--u) * 1.2)); opacity: 0.6; } }
+@keyframes focus-out { to { filter: blur(calc(var(--u) * 0.8)); opacity: 0.6; } }
+
+/* Float: a slow 2D hover that keeps a finished card or icon alive. Put it on a wrapper, not on the .m element. */
+.float { animation: float 3.2s var(--ease-inout) infinite; animation-delay: var(--float-t, 0s); }
+@keyframes float { 50% { translate: 0 calc(var(--u) * var(--float, -1.2)); } }

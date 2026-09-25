@@ -1,0 +1,33 @@
+<!doctype html>
+<!-- Frame: dark as written. For a light frame, write <html lang="en" class="light">. direction.md decides which. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="../base.css">
+  <link rel="stylesheet" href="../ui.css">
+  <!-- Link ../atmosphere.css for skies, clouds, studio, glass and depth, ../world.css for a 3D world. -->
+  <script src="../icons.js"></script>
+  <script src="../motion.js"></script>
+  <style>
+    /* Scene-only layout. Reuse tokens from base.css. */
+  </style>
+</head>
+<body>
+  <div class="bg"></div>
+  <!-- Stage: the beat's subject and its action. The camera holds still while the content moves. Add class="drift" only for a
+       held static image (screenshot, photo, preview): a slow push on moving content reads as a zoom on every scene. -->
+  <main class="stage">
+    <div class="safe">
+      <!-- A negative --t starts the subject mid-entrance, so the cut never lands on an empty frame. -->
+      <div class="card sub m" style="--in:rise; --t:-0.2s; justify-self:center; width:40vw; min-height:30vh">The subject</div>
+    </div>
+  </main>
+  <!-- HUD: screen text that holds still while the stage moves. Its form follows the copy system in direction.md:
+       a caption line, a statement, or a chapter headline with a .kicker. Leave it out when the beat carries no text. -->
+  <header class="hud">
+    <div class="safe" style="align-content:end; justify-items:center">
+      <h1 class="title m" style="--in:rise; --t:-0.2s; text-align:center">One idea on screen</h1>
+    </div>
+  </header>
+</body>
+</html>

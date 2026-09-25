@@ -1,0 +1,603 @@
+/* motion-video UI kit: product-UI parts sized for video. Needs base.css. Restyle with tokens, keep the structure. */
+
+:root {
+  --surface: color-mix(in oklab, var(--bg-2), white 6%);
+  --line: color-mix(in oklab, var(--fg), transparent 88%);
+  --radius: calc(var(--u) * 2.2);
+  --radius-sm: calc(var(--u) * 1.2);
+  --lift: 0 calc(var(--u) * 3) calc(var(--u) * 8) rgb(0 0 0 / 0.22), 0 calc(var(--u) * 0.4) calc(var(--u) * 1) rgb(0 0 0 / 0.08);
+  --ok: #15803d;
+  --warn: #b45309;
+  --bad: #b91c1c;
+  /* Text on an accent fill. Dark worlds use a light accent, so the text goes dark. */
+  --on-accent: #0b0d12;
+}
+:root:where(.light) {
+  --on-accent: #ffffff;
+  --surface: #ffffff;
+  --lift: 0 calc(var(--u) * 3) calc(var(--u) * 7) rgb(15 23 42 / 0.12), 0 calc(var(--u) * 0.3) calc(var(--u) * 0.8) rgb(15 23 42 / 0.06);
+}
+
+/* Surfaces. */
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--lift), inset 0 0 0 1px var(--line);
+  padding: calc(var(--u) * 2.6);
+}
+.window {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--lift), inset 0 0 0 1px var(--line);
+  overflow: clip;
+}
+.window > .bar {
+  display: flex;
+  gap: calc(var(--u) * 0.8);
+  align-items: center;
+  height: calc(var(--u) * 4.4);
+  padding-inline: calc(var(--u) * 1.8);
+  border-bottom: 1px solid var(--line);
+}
+.window > .bar::before {
+  content: "";
+  width: calc(var(--u) * 1.1);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: #ff5f57;
+  box-shadow: calc(var(--u) * 1.7) 0 0 #febc2e, calc(var(--u) * 3.4) 0 0 #28c840;
+  /* The other two dots are shadows past this box: keep bar text clear of them. */
+  margin-right: calc(var(--u) * 3.6);
+}
+/* Phone: put the screen content inside .phone > .screen. Size it with --phone-h. */
+.phone {
+  height: var(--phone-h, calc(var(--u) * 72));
+  aspect-ratio: 9 / 19.5;
+  padding: calc(var(--u) * 1.1);
+  border-radius: calc(var(--u) * 6);
+  background: linear-gradient(145deg, #2a2d34, #0d0f13);
+  box-shadow: var(--lift), inset 0 0 0 calc(var(--u) * 0.25) #3b3f48;
+}
+.phone > .screen {
+  position: relative;
+  height: 100%;
+  border-radius: calc(var(--u) * 5);
+  overflow: clip;
+  background: var(--surface);
+  color: var(--fg);
+}
+
+/* Status chips. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.3em 0.8em;
+  border-radius: 999px;
+  font-size: var(--fs-label);
+  font-weight: 600;
+  background: color-mix(in oklab, var(--chip, var(--accent)), transparent 86%);
+  color: color-mix(in oklab, var(--chip, var(--accent)), black 20%);
+}
+.chip.ok { --chip: var(--ok); }
+.chip.warn { --chip: var(--warn); }
+.chip.bad { --chip: var(--bad); }
+
+/* Buttons. A cursor click is .press on the button: --in:press at the click time. */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.7em 1.4em;
+  border-radius: 999px;
+  font-weight: 650;
+  font-size: var(--fs-body);
+  color: var(--on-accent);
+  background: var(--accent-ink);
+  box-shadow: 0 calc(var(--u) * 1) calc(var(--u) * 2.4) color-mix(in oklab, var(--accent), transparent 60%);
+}
+@keyframes press {
+  0%, 100% { scale: 1; }
+  35% { scale: 0.94; filter: brightness(0.92); }
+}
+
+/* Chat bubbles. .bubble.out is the sender's side. */
+.bubble {
+  max-width: 30ch;
+  padding: 0.7em 1em;
+  border-radius: 1.1em 1.1em 1.1em 0.3em;
+  font-size: var(--fs-body);
+  line-height: 1.3;
+  background: var(--surface);
+  box-shadow: 0 1px 0 var(--line);
+}
+.bubble.out {
+  margin-left: auto;
+  border-radius: 1.1em 1.1em 0.3em 1.1em;
+  background: color-mix(in oklab, var(--accent), white 78%);
+  color: #0b1a10;
+}
+.dots { display: inline-flex; gap: 0.3em; padding: 0.9em 1.1em; }
+.dots > i {
+  width: 0.5em;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--muted);
+  animation: dot 0.9s var(--ease-inout) infinite;
+}
+.dots > i:nth-child(2) { animation-delay: 0.15s; }
+.dots > i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes dot {
+  0%, 60%, 100% { translate: 0 0; opacity: 0.45; }
+  30% { translate: 0 -0.35em; opacity: 1; }
+}
+
+/*
+ * Cursor. Move it with offset-path on the element:
+ *   style="offset-path: path('M 300 900 C 700 700, 900 600, 1180 540'); animation: cursor-move 1.2s var(--ease-inout) 2s both"
+ * Click on arrival with a nested .ripple (animation: ripple .6s var(--ease-out) <arrival> both).
+ */
+.cursor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(var(--u) * 4);
+  aspect-ratio: 1;
+  offset-rotate: 0deg;
+  offset-anchor: 12% 8%;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M5 3 L5 25 L11 19.5 L15 28.5 L19 26.8 L15 18 L23 18 Z' fill='black' stroke='white' stroke-width='2' stroke-linejoin='round'/></svg>") center / contain no-repeat;
+  filter: drop-shadow(0 calc(var(--u) * 0.4) calc(var(--u) * 0.6) rgb(0 0 0 / 0.3));
+  z-index: 10;
+}
+@keyframes cursor-move {
+  from { offset-distance: 0%; }
+  to { offset-distance: 100%; }
+}
+.ripple {
+  position: absolute;
+  left: 12%;
+  top: 8%;
+  width: calc(var(--u) * 6);
+  aspect-ratio: 1;
+  margin: calc(var(--u) * -3) 0 0 calc(var(--u) * -3);
+  border-radius: 50%;
+  border: calc(var(--u) * 0.4) solid color-mix(in oklab, var(--accent), white 20%);
+  opacity: 0;
+}
+@keyframes ripple {
+  0% { scale: 0.2; opacity: 0.9; }
+  100% { scale: 1.3; opacity: 0; }
+}
+
+/* Stamp entrance (--in:slam): slams from large and settles, with a short overshoot. 2D only: its opacity would
+   flatten a 3D prop. */
+@keyframes slam {
+  0% { scale: 2.4; opacity: 0; rotate: -18deg; }
+  60% { scale: 0.92; opacity: 1; rotate: -8deg; }
+  100% { scale: 1; opacity: 1; rotate: -8deg; }
+}
+/* Stamp: a bordered word that slams onto a card. Add data-overlap-ok, since it sits over text by design. */
+.stamp {
+  display: inline-block;
+  padding: 0.15em 0.5em;
+  border: 0.12em solid currentColor;
+  border-radius: 0.2em;
+  font-weight: 800;
+  font-size: var(--fs-title);
+  letter-spacing: 0.08em;
+  color: var(--ok);
+  rotate: -8deg;
+}
+
+/* Specular sweep across glass or a device screen. Put .sheen as the last child of a clipped surface. */
+.sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background: linear-gradient(105deg, transparent 35%, rgb(255 255 255 / 0.35) 48%, transparent 60%) no-repeat;
+  background-size: 250% 100%;
+  animation: sheen 1.6s var(--ease-inout) var(--sheen-t, 0.6s) both;
+}
+@keyframes sheen {
+  from { background-position: 150% 0; }
+  to { background-position: -60% 0; }
+}
+
+/* Focus: dim everything in a group except .focus. Animate --dim on the group. */
+@property --dim { syntax: "<number>"; inherits: true; initial-value: 1; }
+.focus-group > :not(.focus) { opacity: var(--dim); filter: blur(calc((1 - var(--dim)) * var(--u) * 0.6)); }
+@keyframes dim-others { to { --dim: 0.3; } }
+
+/*
+ * Icon tile: an app-icon square with a line icon, as in a payment-method row or an app logo.
+ *   <span class="tile" style="--tile:#2563eb"><i data-icon="wallet"></i></span>
+ * --tile: its color. .tile.soft: a tinted tile with the icon in the color. --tile-s: size in --u.
+ */
+.tile {
+  display: inline-grid;
+  place-items: center;
+  width: calc(var(--u) * var(--tile-s, 8));
+  aspect-ratio: 1;
+  border-radius: 26%;
+  font-size: calc(var(--u) * var(--tile-s, 8) * 0.5);
+  color: #fff;
+  background: linear-gradient(160deg, color-mix(in oklab, var(--tile, var(--accent)), white 18%), color-mix(in oklab, var(--tile, var(--accent)), black 12%));
+  box-shadow:
+    inset 0 calc(var(--u) * 0.2) 0 rgb(255 255 255 / 0.35),
+    0 calc(var(--u) * 0.8) calc(var(--u) * 2) color-mix(in oklab, var(--tile, var(--accent)), transparent 65%);
+}
+.tile.soft {
+  color: color-mix(in oklab, var(--tile, var(--accent)), black 15%);
+  background: color-mix(in oklab, var(--tile, var(--accent)), white 84%);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--tile, var(--accent)), transparent 75%);
+}
+
+/* Pill: an icon and a label in a lit capsule. .pill.glow adds a halo in --accent. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+  padding: 0.55em 1.1em 0.55em 0.7em;
+  border-radius: 999px;
+  font-size: var(--fs-body);
+  font-weight: 600;
+  background: var(--surface);
+  box-shadow: var(--lift), inset 0 0 0 1px var(--line);
+}
+.pill > [data-icon] { color: var(--accent-ink); }
+.pill.glow {
+  box-shadow:
+    0 0 0 calc(var(--u) * 0.3) color-mix(in oklab, var(--accent), transparent 55%),
+    0 0 calc(var(--u) * 5) color-mix(in oklab, var(--accent), transparent 40%),
+    var(--lift);
+}
+
+/* Toast: a notification that drops in from the top. <div class="toast"><span class="tile">…</span><div><b>Title</b><p>Body</p></div></div> */
+.toast {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.6);
+  padding: calc(var(--u) * 1.6) calc(var(--u) * 2.4) calc(var(--u) * 1.6) calc(var(--u) * 1.6);
+  border-radius: calc(var(--u) * 2.4);
+  background: var(--surface);
+  box-shadow: var(--lift), inset 0 0 0 1px var(--line);
+  font-size: var(--fs-body);
+  --tile-s: 6;
+}
+.toast b { display: block; font-weight: 700; }
+.toast p { margin: 0; font-size: var(--fs-label); color: var(--muted); }
+
+/*
+ * Prompt bar: an AI input with attachments and a send button.
+ * <div class="prompt"><span class="chip">brief.pdf</span><span data-type data-at="0.4">Make a teaser</span><b class="send"><i data-icon="arrow-up"></i></b></div>
+ */
+.prompt {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.2);
+  min-width: calc(var(--u) * 70);
+  padding: calc(var(--u) * 1.2) calc(var(--u) * 1.2) calc(var(--u) * 1.2) calc(var(--u) * 2.4);
+  border-radius: calc(var(--u) * 3.6);
+  font-size: var(--fs-body);
+  background: var(--surface);
+  box-shadow: var(--lift), inset 0 0 0 1px var(--line);
+}
+.prompt > .send {
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  width: calc(var(--u) * 5.4);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  color: var(--on-accent);
+  background: var(--accent-ink);
+}
+
+/*
+ * Steps: a numbered banner, one step lit at a time.
+ * <ol class="steps"><li class="on"><b>1</b>Scan</li><li><b>2</b>Check</li>…</ol>
+ * Light the next step with .m and --in:step-on on its <li>.
+ */
+.steps {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 2.4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-body);
+  font-weight: 600;
+}
+/* The dotted path behind the steps. */
+.steps::before {
+  content: "";
+  position: absolute;
+  left: 2em;
+  right: 2em;
+  top: 50%;
+  border-top: calc(var(--u) * 0.35) dotted color-mix(in oklab, var(--muted), transparent 30%);
+  z-index: -1;
+}
+.steps > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.45em 1em 0.45em 0.45em;
+  border-radius: 999px;
+  color: var(--muted);
+  background: color-mix(in oklab, var(--surface), var(--bg) 40%);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.steps > li > b {
+  display: grid;
+  place-items: center;
+  width: 1.7em;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  color: var(--fg);
+  background: var(--line);
+}
+.steps > li.on {
+  color: var(--fg);
+  background: var(--surface);
+  box-shadow: var(--lift), inset 0 0 0 1px var(--line);
+}
+.steps > li.on > b { color: var(--on-accent); background: var(--accent-ink); }
+@keyframes step-on {
+  from { color: var(--muted); background: color-mix(in oklab, var(--surface), var(--bg) 40%); box-shadow: inset 0 0 0 1px var(--line); scale: 0.96; }
+}
+
+/* Monitor: a desktop display on a stand. Put the screen content inside .monitor > .screen. Size it with --mon-w. */
+.monitor {
+  position: relative;
+  width: var(--mon-w, calc(var(--u) * 90));
+  aspect-ratio: 16 / 10;
+  padding: calc(var(--u) * 1);
+  border-radius: calc(var(--u) * 1.8);
+  background: linear-gradient(160deg, #3a3d45, #15171c);
+  box-shadow: var(--lift), inset 0 0 0 calc(var(--u) * 0.2) #4a4e58;
+}
+.monitor > .screen {
+  position: relative;
+  height: 100%;
+  border-radius: calc(var(--u) * 0.9);
+  overflow: clip;
+  background: var(--surface);
+  color: var(--fg);
+}
+.monitor::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  translate: -50% 0;
+  width: 22%;
+  height: 16%;
+  background:
+    linear-gradient(180deg, #2b2e35, #1a1c21) 50% 0 / 30% 70% no-repeat,
+    linear-gradient(180deg, #34373f, #1d1f24) 50% 100% / 100% 30% no-repeat;
+  border-radius: 0 0 calc(var(--u) * 0.8) calc(var(--u) * 0.8);
+}
+
+/*
+ * Paper stack: sheets, labels or invoices piled with a slight fan. The first child is the top sheet.
+ * <div class="stack"><div class="paper">…</div><div class="paper"></div><div class="paper"></div></div>
+ */
+.stack { display: grid; }
+.stack > * { grid-area: 1 / 1; }
+.stack > :nth-child(2) { translate: calc(var(--u) * 1) calc(var(--u) * 1.2); rotate: 3deg; z-index: -1; }
+.stack > :nth-child(3) { translate: calc(var(--u) * -1.2) calc(var(--u) * 2); rotate: -4deg; z-index: -2; }
+.stack > :nth-child(4) { translate: calc(var(--u) * 0.6) calc(var(--u) * 2.8); rotate: 6deg; z-index: -3; }
+.paper {
+  padding: calc(var(--u) * 2.4);
+  border-radius: calc(var(--u) * 0.6);
+  color: #1d2330;
+  background: #fbfbf8;
+  box-shadow: 0 calc(var(--u) * 0.6) calc(var(--u) * 1.8) rgb(0 0 0 / 0.14), inset 0 0 0 1px rgb(0 0 0 / 0.05);
+}
+/* Receipt: paper with a torn zigzag bottom edge. */
+.paper.receipt {
+  border-radius: calc(var(--u) * 0.6) calc(var(--u) * 0.6) 0 0;
+  padding-bottom: calc(var(--u) * 3.4);
+  font-family: var(--mono);
+  mask:
+    linear-gradient(black, black) top / 100% calc(100% - var(--u)) no-repeat,
+    conic-gradient(from -45deg at 50% 100%, black 90deg, transparent 0) bottom / calc(var(--u) * 2) var(--u) repeat-x;
+}
+
+/* Badge: a round symbol bubble with a tail, pinned to a prop's corner. <b class="badge">%</b> or with a data-icon. */
+.badge {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: calc(var(--u) * var(--badge-s, 7));
+  aspect-ratio: 1;
+  border-radius: 50%;
+  font-size: calc(var(--u) * var(--badge-s, 7) * 0.48);
+  font-weight: 800;
+  color: var(--on-accent);
+  background: var(--accent-ink);
+  box-shadow: var(--lift);
+}
+.badge::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  bottom: -4%;
+  width: 26%;
+  aspect-ratio: 1;
+  background: inherit;
+  clip-path: polygon(0 100%, 100% 0, 30% 0);
+}
+
+/*
+ * Leader lines: one full-frame svg holds every line. motion.js routes each path between two elements and follows them.
+ * <svg class="links"><path data-from="#row-2" data-to="#callout-2" data-draw data-at="1.4" data-dash="3 5"/></svg>
+ * Put it before the elements it joins, so the cards sit over the line ends. --link: line color.
+ */
+.links {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  fill: none;
+  stroke: var(--link, color-mix(in oklab, var(--accent-ink), transparent 35%));
+  stroke-width: calc(var(--u) * 0.22);
+  stroke-linecap: round;
+}
+
+/* Callout: an icon tile, a title and one line, pinned beside a device by a leader line. */
+.callout {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--u) * 1.4);
+  width: max-content;
+  max-width: calc(var(--u) * 46);
+  padding: calc(var(--u) * 1.2) calc(var(--u) * 2) calc(var(--u) * 1.2) calc(var(--u) * 1.2);
+  border-radius: calc(var(--u) * 1.8);
+  background: var(--surface);
+  box-shadow: var(--lift), inset 0 0 0 1px var(--line);
+  font-size: var(--fs-label);
+  --tile-s: 5;
+}
+.callout b { display: block; font-size: var(--fs-body); font-weight: 700; }
+.callout p { margin: 0; color: var(--muted); }
+
+/*
+ * Sticker: a starburst slapped onto a device corner or a card. <b class="burst m" style="--in:burst-in">Auto<br>isi</b>
+ * --burst: its color. --burst-s: size in --u.
+ */
+.burst {
+  display: inline-grid;
+  place-items: center;
+  width: calc(var(--u) * var(--burst-s, 16));
+  aspect-ratio: 1;
+  padding: calc(var(--u) * var(--burst-s, 16) * 0.14);
+  text-align: center;
+  text-transform: uppercase;
+  line-height: 0.95;
+  font-weight: 800;
+  font-size: calc(var(--u) * var(--burst-s, 16) * 0.18);
+  color: color-mix(in oklab, var(--burst, #facc15), black 78%);
+  background: radial-gradient(closest-side, color-mix(in oklab, var(--burst, #facc15), white 20%), var(--burst, #facc15));
+  clip-path: polygon(50.0% 0.0%, 57.3% 8.6%, 67.1% 3.0%, 71.0% 13.6%, 82.1% 11.7%, 82.2% 23.0%, 93.3% 25.0%, 89.5% 35.6%, 99.2% 41.3%, 92.0% 50.0%, 99.2% 58.7%, 89.5% 64.4%, 93.3% 75.0%, 82.2% 77.0%, 82.1% 88.3%, 71.0% 86.4%, 67.1% 97.0%, 57.3% 91.4%, 50.0% 100.0%, 42.7% 91.4%, 32.9% 97.0%, 29.0% 86.4%, 17.9% 88.3%, 17.8% 77.0%, 6.7% 75.0%, 10.5% 64.4%, 0.8% 58.7%, 8.0% 50.0%, 0.8% 41.3%, 10.5% 35.6%, 6.7% 25.0%, 17.8% 23.0%, 17.9% 11.7%, 29.0% 13.6%, 32.9% 3.0%, 42.7% 8.6%);
+  rotate: 12deg;
+}
+@keyframes burst-in {
+  0% { scale: 0; rotate: -40deg; }
+  60% { scale: 1.15; rotate: 18deg; }
+  100% { scale: 1; rotate: 12deg; }
+}
+
+/* Kicker: a numbered chapter tag above a headline. <p class="kicker"><b>01</b>Rekod jualan</p> */
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7em;
+  margin: 0;
+  font-size: var(--fs-label);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+}
+.kicker > b {
+  padding: 0.2em 0.6em;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+  color: var(--bg);
+  background: var(--fg);
+}
+
+/* Checklist: items with a check in the accent. Build it item by item with .m on each <li>. li.off: a missing item. */
+.checks {
+  display: grid;
+  gap: 0.55em;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-label);
+}
+.checks > li { display: flex; align-items: center; gap: 0.6em; }
+.checks > li::before {
+  content: "";
+  flex: none;
+  width: 1.2em;
+  aspect-ratio: 1;
+  background: var(--accent-ink);
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'><circle cx='12' cy='12' r='10'/><path d='m8.5 12 2.5 2.5 4.5-5'/></svg>") center / contain no-repeat;
+}
+.checks > li.off { color: var(--muted); text-decoration: line-through; }
+.checks > li.off::before { background: var(--line); }
+
+/* Featured card: the recommended plan, outlined in the accent, with a .ribbon on its top edge. */
+.card.featured {
+  position: relative;
+  box-shadow: var(--lift), inset 0 0 0 calc(var(--u) * 0.3) var(--accent-ink);
+}
+.ribbon {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  translate: -50% -50%;
+  padding: 0.3em 0.9em;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-size: var(--fs-label);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--ribbon, #facc15), black 78%);
+  background: var(--ribbon, #facc15);
+}
+
+/* Store badge: a dark two-line download button. <span class="store"><small>Download on the</small>App Store</span> */
+.store {
+  display: inline-grid;
+  padding: 0.45em 1.1em 0.5em;
+  border-radius: 0.5em;
+  line-height: 1.05;
+  font-size: var(--fs-sub);
+  font-weight: 700;
+  color: #fff;
+  background: #0b0b0c;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.25);
+}
+.store > small { font-size: var(--fs-label); font-weight: 500; }
+
+/* Tap: a touch mark on a phone screen, no cursor. Place it with left and top inside .screen, time it with --t. */
+.tap {
+  position: absolute;
+  width: calc(var(--u) * 5);
+  aspect-ratio: 1;
+  margin: calc(var(--u) * -2.5) 0 0 calc(var(--u) * -2.5);
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--fg), transparent 78%);
+  box-shadow: 0 0 0 calc(var(--u) * 0.3) rgb(255 255 255 / 0.7);
+  pointer-events: none;
+  z-index: 5;
+  animation: tap 0.7s var(--ease-out) var(--t, 0s) both;
+}
+@keyframes tap {
+  0% { opacity: 0; scale: 0.6; }
+  20% { opacity: 1; scale: 0.9; }
+  100% { opacity: 0; scale: 1.6; }
+}
+
+/* Bottom sheet: slides up inside a phone .screen. Enter with .m and --in:sheet-up. */
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: calc(var(--u) * 2) calc(var(--u) * 2) calc(var(--u) * 3);
+  border-radius: calc(var(--u) * 2.4) calc(var(--u) * 2.4) 0 0;
+  background: var(--surface);
+  box-shadow: 0 calc(var(--u) * -1) calc(var(--u) * 4) rgb(0 0 0 / 0.18);
+  z-index: 4;
+}
+@keyframes sheet-up { from { translate: 0 105%; } }
