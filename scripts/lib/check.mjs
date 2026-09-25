@@ -196,8 +196,20 @@ function describeAnimations() {
     const el = a.effect.target;
     // An opacity or filter animation on an element that holds 3D content flattens that content.
     const flattens3d = !!el && props.some((p) => p === 'opacity' || p === 'filter') && !!el.querySelector('.cube, .lid, .stand, .laptop') && !!el.closest('.world');
+    // The kit's translate entrances and exits carry no placement offset. On an element placed with its own translate
+    // (a -50% centering), the motion swings through that offset, so the element jumps sideways during it.
+    let ownTranslate = null;
+    if (el && ['rise', 'drop', 'left', 'right', 'reveal', 'sink-out', 'rise-out'].includes(a.animationName)) {
+      const at = a.currentTime;
+      a.cancel();
+      const base = getComputedStyle(el).translate;
+      a.currentTime = at;
+      a.pause();
+      if (base && base !== 'none' && !/^0px( 0px)?( 0px)?$/.test(base)) ownTranslate = base;
+    }
     return {
       flattens3d,
+      ownTranslate,
       name: a.animationName || a.transitionProperty || a.id || 'waapi',
       kind: a.constructor.name,
       target: el ? `${el.localName}${el.id ? `#${el.id}` : el.classList.length ? `.${[...el.classList].slice(0, 2).join('.')}` : ''}` : '?',
@@ -400,6 +412,7 @@ export async function checkScene(browser, m, scene, carry = null) {
     if (!anims.length && !seekable) add('warn', null, 'Scene has no animation. A static frame reads as a frozen video.', 'Add entrance motion and slow ambient drift.');
     const starts = new Map();
     for (const a of anims) {
+      if (a.ownTranslate) add('error', a.delay, `"${a.name}" on ${a.target} animates translate, but the element is placed with its own translate (${a.ownTranslate}). The animation swings through that offset, so the element jumps during it.`, 'Place the element with left/top, inset or grid, or wrap it: put the translate on a still wrapper and the .m on the inner element.');
       if (a.flattens3d) add('error', a.delay, `"${a.name}" on ${a.target} animates opacity or filter around 3D props, which flattens them for the rest of the scene.`, 'Use a transform-only entrance on 3D props: pop-in, drop-in, grow-x or grow-y.');
       if (a.kind === 'CSSTransition') add('error', null, `CSS transition on ${a.target}. Transitions start on real time and cannot be seeked reliably.`, 'Replace the transition with @keyframes and animation-delay.');
       const finite = Number.isFinite(a.iterations) && Number.isFinite(a.duration);
