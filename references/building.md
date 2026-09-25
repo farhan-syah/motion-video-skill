@@ -175,7 +175,7 @@ A place makes a video feel made, not templated. Each layer is a full-frame eleme
 
 ### Type
 
-- **Glyph coverage:** a fetched `latin` subset covers Western European letters and common punctuation, not every symbol (`→` is missing from many). Add `--subset latin-ext`, or draw the symbol with an icon.
+- **Glyph coverage:** a fetched `latin` subset covers Western European letters and common punctuation, not every symbol (`→`, `≥` and `✓` are missing from many). Add `--subset latin-ext`, or draw the symbol with an icon.
 - **Any family:** `font "Fraunces"` fetches a Fontsource family (the Google Fonts library and more, all open licensed) into `fonts/`, variable when it exists. Link `../fonts/<family>.css` and set `--font` or `font-family`. `--subset latin-ext` or `cyrillic` covers other scripts.
 - **Brand fonts:** copy the supplied `.woff2` files into `fonts/` and declare them with `@font-face`.
 - **Variable axes:** set `font-variation-settings` or `font-weight` and animate them with `@keyframes` for type that changes weight or width as it moves.
