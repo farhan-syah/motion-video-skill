@@ -80,6 +80,7 @@ Scene boundaries round the running total to whole frames, so the video length ma
   - **One linear gain:** it reaches the target, re-measured after a peak limiter at 0.5 dB under the ceiling. The ceiling is −1.5 dBTP for voice or music, −6 dBTP for effects alone: sharp clicks near full scale are painful.
   - **Measured after encoding:** AAC rebuilds peaks between samples and trims top end, so loudness and true peak are measured on the encoded file. The limiter runs 4x oversampled. An overshoot lowers gain and limit together.
   - **Ducking:** music ducks hard under voiceover, effects more gently. The bed ducks under every hit and word.
+  - **Expect it under target:** an effects-only mix led by one or two big hits usually ships 3–6 LU under −18 LUFS. That is the payoff keeping its contrast, not an error.
   - **Peaky loudest moment:** the loudest moment's peak sets the file's gain. When that moment is a sharp hit (a braam, a slam), the file ships quieter than when it is a sustained or tonal sound. A small volume change that makes a sharp hit the loudest moment can drop the file by several LU.
   - **Payoff first:** the gain rises toward the target only while the loudest moment keeps its 400 ms lead over the rest, within 1.5 dB (`MOTION_VIDEO_LEAD_LOSS` overrides it). A sparse mix that cannot reach the target within that ships quieter, and `render` prints by how much.
   - **Bed after gain:** the bed joins after the loudness gain, so it never lowers the foreground.
