@@ -137,7 +137,7 @@ export async function doctor(root) {
   }
   say('voxcpm2', vox.ok ? `available (${vox.why}): 30 languages, voice design and cloning. ${ckpt}` : `not available: ${vox.why}`);
   const engine = cfg.tts?.engine ? cfg.tts.engine : cfg.tts?.command ? `command: ${cfg.tts.command}` : cfg.tts?.model ? `model: ${cfg.tts.model}` : null;
-  say('tts default', engine ? `${engine} (from the config)` : 'Kokoro (English). Set "tts" in the config to change it.');
+  say('tts default', engine ? `${engine} (from the config)` : `Kokoro, English only.${vox.ok ? ' For any other language, pass --engine voxcpm (available here).' : ''} "tts" in the config changes the default.`);
   if (!vox.ok && !cfg.tts?.command && !cfg.tts?.model) limits.push(`narration in a language other than English: no engine here (VoxCPM2 ${vox.why}). Ask for the user's TTS (speak --command) or a recording.`);
   const modelFree = freeSpace(existsSync(models) ? models : cacheRoot());
   if (vox.ok && ckpt.startsWith('no checkpoint') && modelFree != null && modelFree < 8 * 1024 ** 3) limits.push(`VoxCPM2's first run downloads about 4.7 GB, and the model folder's disk has ${gb(modelFree)} free.`);
