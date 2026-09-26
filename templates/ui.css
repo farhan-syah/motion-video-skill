@@ -543,7 +543,8 @@
   position: absolute;
   left: 50%;
   top: 0;
-  translate: -50% -50%;
+  /* Centered with transform, so an entrance that animates translate composes with it and never jumps. */
+  transform: translate(-50%, -50%);
   padding: 0.3em 0.9em;
   border-radius: 999px;
   white-space: nowrap;

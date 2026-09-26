@@ -176,7 +176,9 @@ function collectText(short) {
       if (es.backgroundImage !== 'none') break;
       if (!bg || (bg.length > 3 && bg[3] === 0)) continue;
       const r = e.getBoundingClientRect();
-      if ((bg.length < 4 || bg[3] >= 0.95) && effOpacity(e) >= 0.95 && r.left <= full.l + 1 && r.right >= full.r - 1 && r.top <= full.t + 1 && r.bottom >= full.b - 1) plate = es.backgroundColor;
+      // The plate is the text's own element or an ancestor, so it fades with the text: their contrast holds through a
+      // fade-in (a caption line's pop), and only the plate's own color alpha matters.
+      if ((bg.length < 4 || bg[3] >= 0.95) && r.left <= full.l + 1 && r.right >= full.r - 1 && r.top <= full.t + 1 && r.bottom >= full.b - 1) plate = es.backgroundColor;
       break;
     }
     const text = texts.map((t) => t.textContent).join(' ').replace(/\s+/g, ' ').trim();
@@ -469,7 +471,7 @@ export async function checkScene(browser, m, scene, carry = null) {
     if (!anims.length && !seekable) add('warn', null, 'Scene has no animation. A static frame reads as a frozen video.', 'Add entrance motion and slow ambient drift.');
     const starts = new Map();
     for (const a of anims) {
-      if (a.ownTranslate) add('error', a.delay, `"${a.name}" on ${a.target} animates translate, but the element is placed with its own translate (${a.ownTranslate}). The animation swings through that offset, so the element jumps during it.`, 'Place the element with left/top, inset or grid, or wrap it: put the translate on a still wrapper and the .m on the inner element.');
+      if (a.ownTranslate) add('error', a.delay, `"${a.name}" on ${a.target} animates translate, but the element is placed with its own translate (${a.ownTranslate}). The animation swings through that offset, so the element jumps during it.`, 'Center it with transform: translate(-50%, -50%) instead of the translate property (the two compose), or place it with left/top, inset or grid.');
       if (a.flattens3d) add('error', a.delay, `"${a.name}" on ${a.target} animates opacity or filter around 3D props, which flattens them for the rest of the scene.`, 'Use a transform-only entrance on 3D props: pop-in, drop-in, grow-x or grow-y.');
       if (a.kind === 'CSSTransition') add('error', null, `CSS transition on ${a.target}. Transitions start on real time and cannot be seeked reliably.`, 'Replace the transition with @keyframes and animation-delay.');
       const finite = Number.isFinite(a.iterations) && Number.isFinite(a.duration);
@@ -534,6 +536,11 @@ export async function checkScene(browser, m, scene, carry = null) {
         if (it.opacity >= 0.95) {
           s.firstSolid ??= t;
           s.lastSolid = t;
+        }
+        // Fully opaque: contrast is measured here, once a fade-in (a caption line's pop) has finished.
+        if (it.opacity >= 0.99) {
+          s.firstFull ??= t;
+          s.lastFull = t;
         }
         if (it.overflow && !reported.has(`o${it.id}`)) {
           reported.add(`o${it.id}`);
@@ -671,7 +678,7 @@ export async function checkScene(browser, m, scene, carry = null) {
     const byTime = new Map();
     for (const s of seen.values()) {
       if (s.firstSolid == null || s.it.clipText || s.it.texture) continue;
-      const t = Math.min(s.lastSolid, s.firstSolid + 500);
+      const t = s.firstFull != null ? Math.min(s.lastFull, s.firstFull + 500) : Math.min(s.lastSolid, s.firstSolid + 500);
       const list = byTime.get(t) ?? [];
       list.push({ s });
       byTime.set(t, list);
