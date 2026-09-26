@@ -425,9 +425,18 @@ const SAME = [['ni', 'ini'], ['tu', 'itu'], ['tak', 'tidak'], ['dah', 'sudah'], 
   ['org', 'orang'], ['yg', 'yang'], ['dgn', 'dengan'], ['utk', 'untuk'], ['saintis', 'scientist'], ['teknologi', 'technology']];
 const sameOf = new Map(SAME.flatMap((set, i) => set.map((w) => [w, i])));
 
+// A recognizer splits some written words apart: "non-stop" comes back as "non" and "-stop", "1,100" as "1"
+// and ",100". A piece that starts with a hyphen or a comma before a digit rejoins the word before it.
+const joinFragments = (words) => words.reduce((out, w) => {
+  const prev = out[out.length - 1];
+  if (prev && /^\s*(-\p{L}|,\d)/u.test(w.text)) out[out.length - 1] = { ...prev, text: prev.text.trimEnd() + w.text.trim(), end: w.end };
+  else out.push(w);
+  return out;
+}, []);
+
 // A recognized word with a unit written onto its number ("5L") becomes two words at the same time, so the unit can
 // match the script's word for it.
-const splitUnits = (words) => words.flatMap((w) => {
+const splitUnits = (words) => joinFragments(words).flatMap((w) => {
   const m = /^(.*\d)\s*(\p{L}+|%)([.,!?]*)$/u.exec(w.text);
   return m && unitOf.has(m[2].toLowerCase()) ? [{ ...w, text: m[1] }, { ...w, text: m[2] + m[3] }] : [w];
 });
@@ -590,7 +599,7 @@ export function checkSpeech(heard, sentence) {
   // How far the take is from its sentence, to keep the best of several takes.
   const badness = extraSeconds + 0.3 * extraWords + 0.3 * missing.length + (wrongNumber ? 1 : 0) + 2 * Math.max(0, 1 - sureShare);
   // Words the recognizer did not hear as written (numbers aside): a mispronounced word, or a misheard one. A compound
-  // heard as two words ("MMS -TTS" for "MMS-TTS") was heard right.
+  // heard as two words ("Wi -Fi" for "Wi-Fi") was heard right.
   const stream = words.map((w) => norm(w.text).join('')).join('');
   const unsure = plain.filter((x) => !sure[x.i] && !(norm(x.w).join('').length > 4 && norm(x.w).length > 1 && stream.includes(norm(x.w).join('')))).map((x) => x.w);
   return { ok: !why.length, extra, missing, unsure, why: why.join(', '), badness };

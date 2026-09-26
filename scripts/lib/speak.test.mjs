@@ -80,3 +80,41 @@ test('non-verbal tags reach VoxCPM2 but never captions or checks', async () => {
   assert.equal(withoutTags(script), 'It failed again.\n[pause 0.5] Then it worked.');
   assert.match(chunks(script)[0].text, /\[sigh\]/);
 });
+
+test('a delivery note covers its own line as one generation, and is never spoken', () => {
+  const script = 'Rain falls on the hills. Then it runs downhill.\n(curious tone, rising intonation) Where does the water go?\nMost of it sinks into the ground.\nSome reaches the river.\n\nThe river runs to the sea.';
+  const c = chunks(script);
+  assert.deepEqual(c.map((x) => [x.text, x.delivery ?? null]), [
+    ['Rain falls on the hills. Then it runs downhill.', null],
+    ['Where does the water go?', '(curious tone, rising intonation)'],
+    ['Most of it sinks into the ground. Some reaches the river.', null],
+    ['The river runs to the sea.', null],
+  ]);
+  assert.equal(spoken(script), 'Rain falls on the hills. Then it runs downhill. Where does the water go? Most of it sinks into the ground. Some reaches the river. The river runs to the sea.');
+  assert.ok(phrases(script).every((p) => !p.text.includes('(')));
+});
+
+test('de-essing turns down a harsh "s" and leaves the rest untouched', async () => {
+  const { deEss } = await import('./speak.mjs');
+  const rate = 48000;
+  const band = (x, lo, hi) => {
+    // Energy near one frequency, by correlation with a sine and cosine.
+    const f = (lo + hi) / 2;
+    let c = 0;
+    let s = 0;
+    for (let i = 0; i < x.length; i++) {
+      c += x[i] * Math.cos((2 * Math.PI * f * i) / rate);
+      s += x[i] * Math.sin((2 * Math.PI * f * i) / rate);
+    }
+    return Math.hypot(c, s);
+  };
+  // A vowel: 200 Hz for 2 s. Then an "s": 7 kHz, far louder than the vowel, for 0.2 s.
+  const x = new Float32Array(Math.round(2.4 * rate));
+  for (let i = 0; i < 2 * rate; i++) x[i] = 0.3 * Math.sin((2 * Math.PI * 200 * i) / rate);
+  for (let i = 2.1 * rate; i < 2.3 * rate; i++) x[i] = 0.6 * Math.sin((2 * Math.PI * 7000 * i) / rate);
+  const y = deEss(x);
+  const s = (a) => band(a.subarray(2.12 * rate, 2.28 * rate), 7000, 7000);
+  const v = (a) => band(a.subarray(0.5 * rate, 1.5 * rate), 200, 200);
+  assert.ok(s(y) < s(x) * 0.5, 'the "s" is turned down by more than 6 dB');
+  assert.ok(Math.abs(v(y) / v(x) - 1) < 0.01, 'the vowel passes untouched');
+});

@@ -2,7 +2,7 @@
 //   command: any TTS the user already runs (Piper, XTTS, F5, a cloud CLI), through a command template.
 //   voxcpm:  VoxCPM2 (OpenBMB, Apache 2.0): 30 languages, voice design and cloning. Needs an NVIDIA GPU with 8 GB.
 //   model:   any Hugging Face text-to-speech model, run locally: transformers.js for ONNX weights, else the
-//            transformers pipeline in Python on the CPU (MMS-TTS speaks 1,100+ languages this way).
+//            transformers pipeline in Python on the CPU.
 //   default: Kokoro-82M (Apache 2.0) through kokoro-js: local, English voices, no setup.
 // Flags choose, else "tts" in ~/.config/motion-video/config.json.
 import { spawnSync } from 'node:child_process';
@@ -68,9 +68,13 @@ function decode(file) {
 export const PAUSES = { beat: 0.8, line: 0.45, sentence: 0.3, mark: 0.6 };
 export function phrases(script) {
   const out = [];
+  let delivery = null;
   const add = (text, pause, kind) => {
     const t = text.replace(/\s+/g, ' ').trim();
-    if (t) out.push({ text: t, pause, kind });
+    if (t) {
+      out.push({ text: t, pause, kind, ...(delivery ? { delivery } : {}) });
+      delivery = null;
+    }
     else if (out.length) {
       const last = out[out.length - 1];
       // A [pause] mark is exact, so it wins over the break it sits on.
@@ -81,7 +85,12 @@ export function phrases(script) {
   const beats = script.replace(/\r/g, '').split(/\n\s*\n/);
   beats.forEach((beat, bi) => {
     const lines = beat.split('\n');
-    lines.forEach((line, li) => {
+    lines.forEach((raw, li) => {
+      // A delivery note opens a line: "(asking a question) Want your own voice?". VoxCPM2 speaks by it, and it is never
+      // spoken, shown in captions or checked.
+      const lead = LEAD.exec(raw);
+      if (lead) delivery = `(${lead[1].trim()})`;
+      const line = lead ? raw.slice(lead[0].length) : raw;
       const end = li < lines.length - 1 ? PAUSES.line : bi < beats.length - 1 ? PAUSES.beat : 0;
       const endKind = li < lines.length - 1 ? 'line' : bi < beats.length - 1 ? 'beat' : 'end';
       // [pause] marks split a line into pieces.
@@ -107,15 +116,28 @@ export function chunks(script, { lines = false, max = 40 } = {}) {
   const out = [];
   let group = [];
   const count = (list) => list.reduce((n, p) => n + p.text.split(/\s+/).length, 0);
+  // A delivery note covers its own line as one generation: VoxCPM2 applies an instruction to everything it speaks in
+  // that generation, so the lines after it return to --style in a generation of their own.
+  let delivery = null;
+  let groupDelivery = null;
   const flush = () => {
     if (!group.length) return;
     const last = group[group.length - 1];
-    out.push({ text: group.map((p) => p.text).join(' '), pause: last.pause, kind: last.kind, sentences: group });
+    out.push({ text: group.map((p) => p.text).join(' '), pause: last.pause, kind: last.kind, sentences: group, ...(groupDelivery ? { delivery: groupDelivery } : {}) });
     group = [];
   };
   for (const p of phrases(script)) {
+    if (p.delivery) {
+      flush();
+      delivery = p.delivery;
+    }
     if (group.length && count(group) + count([p]) > max) flush();
+    if (!group.length) groupDelivery = delivery;
     group.push(p);
+    if (delivery && p.kind !== 'sentence') {
+      flush();
+      delivery = null;
+    }
     if (!(p.kind === 'sentence' || (p.kind === 'line' && !lines))) flush();
   }
   flush();
@@ -128,8 +150,12 @@ export function chunks(script, { lines = false, max = 40 } = {}) {
 export const TAGS = /\[(?:laughing|sigh|uhm|shh|question-(?:ah|ei|en|oh)|surprise-(?:wa|yo)|dissatisfaction-hnn)\]/gi;
 export const withoutTags = (text) => text.replace(TAGS, ' ').replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n').trim();
 
-// The words of a script as spoken: pause marks and tags removed, one line. This is the script captions and checks read.
-export const spoken = (script) => withoutTags(script.replace(/\[pause(?:\s+[\d.]+)?\]/gi, ' ')).replace(/\s+/g, ' ').trim();
+// A delivery note at the start of a line, in parentheses.
+const LEAD = /^[ \t]*\(([^()\n]{2,120})\)[ \t]*/;
+
+// The words of a script as spoken: delivery notes, pause marks and tags removed, one line. This is the script captions
+// and checks read.
+export const spoken = (script) => withoutTags(script.replace(new RegExp(LEAD.source, 'gm'), '').replace(/\[pause(?:\s+[\d.]+)?\]/gi, ' ')).replace(/\s+/g, ' ').trim();
 
 // A stop inside a number ("13.5") or a name ("Node.js") is not a sentence end: Latin stops end one only before a
 // space or the end of the text. CJK stops always do.
@@ -156,7 +182,7 @@ async function transformersModel(script, { model }) {
   try {
     tts = await pipeline('text-to-speech', model, { dtype: 'fp32' });
   } catch (e) {
-    // Most Hugging Face TTS models ship PyTorch weights only (MMS-TTS in 1,100+ languages among them): Python runs them.
+    // Most Hugging Face TTS models ship PyTorch weights only: Python runs them.
     return pythonModel(script, { model, why: e.message.split('\n')[0] });
   }
   const parts = [];
@@ -396,7 +422,7 @@ async function heardCheck(file, text, language) {
 async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.6, steps = 16, device, seed: asked, configSeed, language, reroll = [], lines = false }, out) {
   const ready = voxcpmReady();
   if (!ready.ok && !device) throw new Error(`speak --engine voxcpm ${ready.why}. Use the default Kokoro engine, another TTS with --command, or --device cpu (very slow).`);
-  if (!voice && !reference) console.error('speak: no --voice given, so VoxCPM2 picks its own voice. Design one with --voice "(age, pitch, tone, accent)" (references/tts.md).');
+  if (!voice && !reference) console.error('speak: no --voice given, so VoxCPM2 picks its own voice. Design one with --voice "(age, pitch, tone, accent)" (references/tts/voxcpm2.md).');
   let units = chunks(script, { lines });
   if (!units.length) throw new Error('speak: the script is empty.');
   for (const n of reroll) if (!(n >= 1 && n <= units.length)) throw new Error(`speak --reroll ${n}: the script has parts 1 to ${units.length}.`);
@@ -428,7 +454,7 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
   const anchorKey = reference ? null : hash('reference', seed, language ?? '');
   const anchorFile = anchorKey ? join(cache, `voice-${anchorKey}.wav`) : null;
   // Takes made at the runner's own settings (cfg 2, 10 steps) keep their older keys.
-  const takeFile = (s) => join(cache, `${hash(anchorKey, style, s.text, s.seed, ...(cfg !== 2 || steps !== 10 ? [cfg, steps] : []))}.wav`);
+  const takeFile = (s) => join(cache, `${hash(anchorKey, s.style ?? style, s.text, s.seed, ...(cfg !== 2 || steps !== 10 ? [cfg, steps] : []))}.wav`);
   // The designed voice speaks the script's opening, 25 words or more: a clip long enough for every part to hold it.
   const opening = [];
   for (const p of phrases(script)) {
@@ -488,7 +514,10 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
       }
       return { ...c, file: tidied, seed: s.seed };
     };
-    // The best take of each part: its recorded take, else seed + index, retried with new seeds. A re-rolled part
+    // A part's first seed comes from its own text, not its place: adding or splitting a line leaves every other
+    // part's seed, and so its cached take, as it was.
+    const textSeed = (text) => seed + (parseInt(createHash('sha1').update(text).digest('hex').slice(0, 6), 16) % 1000);
+    // The best take of each part: its recorded take, else its text seed, retried with new seeds. A re-rolled part
     // draws a fresh seed and competes with the take it had, so a worse draw never replaces a better one.
     const pick = async (list, rolls) => {
       const said = list.map((u) => u.text);
@@ -496,9 +525,13 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
       const best = new Array(said.length).fill(null);
       for (const i of fresh.keys()) {
         const prev = chosen[said[i]];
-        if (prev != null && existsSync(takeFile({ text: said[i], seed: prev }))) best[i] = await judge({ index: i, text: said[i], seed: prev });
+        const s = { index: i, text: said[i], seed: prev, ...(list[i].delivery ? { style: list[i].delivery } : {}) };
+        if (prev != null && existsSync(takeFile(s))) best[i] = await judge(s);
       }
-      let todo = said.map((text, index) => ({ index, text, seed: fresh.get(index) ?? chosen[text] ?? seed + index }));
+      // A part's own delivery note replaces --style for it. A note appended to a long style is outweighed by it, and
+      // the line keeps the base delivery.
+      const styleOf = (i) => (list[i].delivery ? { style: list[i].delivery } : {});
+      let todo = said.map((text, index) => ({ index, text, seed: fresh.get(index) ?? chosen[text] ?? textSeed(text), ...styleOf(index) }));
       for (const [i, s] of fresh) console.error(`speak: part ${i + 1} re-rolled with seed ${s}.`);
       for (let attempt = 0; attempt < 3 && todo.length; attempt++) {
         const missing = todo.filter((s) => !existsSync(takeFile(s)));
@@ -529,7 +562,7 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
       const next = [];
       const from = [];
       units.forEach((u, i) => {
-        const parts = split[i] ? u.sentences.map((p, k) => ({ text: p.text, pause: k === u.sentences.length - 1 ? u.pause : p.pause, sentences: [p] })) : [u];
+        const parts = split[i] ? u.sentences.map((p, k) => ({ text: p.text, pause: k === u.sentences.length - 1 ? u.pause : p.pause, sentences: [p], ...(u.delivery ? { delivery: u.delivery } : {}) })) : [u];
         for (const p of parts) {
           next.push(p);
           from.push(i);
@@ -562,6 +595,114 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+// In-place radix-2 FFT of re/im (length a power of two). inverse: the inverse transform, scaled by 1/n.
+function fft(re, im, inverse = false) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      [re[i], re[j]] = [re[j], re[i]];
+      [im[i], im[j]] = [im[j], im[i]];
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = ((inverse ? 2 : -2) * Math.PI) / len;
+    const wr = Math.cos(ang);
+    const wi = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let cr = 1;
+      let ci = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k;
+        const b = a + len / 2;
+        const tr = re[b] * cr - im[b] * ci;
+        const ti = re[b] * ci + im[b] * cr;
+        re[b] = re[a] - tr;
+        im[b] = im[a] - ti;
+        re[a] += tr;
+        im[a] += ti;
+        [cr, ci] = [cr * wr - ci * wi, cr * wi + ci * wr];
+      }
+    }
+  }
+  if (inverse) for (let i = 0; i < n; i++) (re[i] /= n), (im[i] /= n);
+}
+
+// De-esses generated speech: an "s" louder than the voice's own vowels sounds harsh, and a generated voice often
+// makes it so (VoxCPM2's peaked 5-6 dB over its vowels, Kokoro's 3 dB under). In each 21 ms frame where the
+// 4.5-11 kHz band rises above 4 dB under the vowel level (the median 100-3000 Hz energy of the louder frames), that
+// band is turned down to that limit, by at most 15 dB, easing back over about 40 ms. Everything else passes untouched.
+// stats, when given, receives the share of frames turned down and the deepest cut in dB.
+export function deEss(x, rate = 48000, stats = null) {
+  const n = 1024;
+  const hop = n / 2;
+  // A sqrt-Hann window on analysis and synthesis at half overlap rebuilds the signal exactly where no gain applies.
+  const win = Float32Array.from({ length: n }, (_, i) => Math.sqrt(0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n)));
+  const bin = (hz) => Math.round((hz * n) / rate);
+  const [v0, v1, s0, s1, edge] = [bin(100), bin(3000), bin(4500), bin(11000), bin(3500)];
+  const frames = Math.max(0, Math.ceil((x.length - n) / hop) + 1);
+  const spectra = [];
+  const vowel = [];
+  const sib = [];
+  for (let f = 0; f < frames; f++) {
+    const re = new Float64Array(n);
+    const im = new Float64Array(n);
+    for (let i = 0; i < n; i++) re[i] = (x[f * hop + i] ?? 0) * win[i];
+    fft(re, im);
+    let v = 0;
+    let s = 0;
+    for (let k = v0; k < v1; k++) v += re[k] ** 2 + im[k] ** 2;
+    for (let k = s0; k < s1; k++) s += re[k] ** 2 + im[k] ** 2;
+    spectra.push([re, im]);
+    vowel.push(v);
+    sib.push(s);
+  }
+  const loud = vowel.filter((v) => v > 0).sort((a, b) => a - b);
+  const upper = loud.slice(Math.floor(loud.length / 2));
+  const ref = upper[Math.floor(upper.length / 2)] ?? 0;
+  const out = new Float32Array(x.length);
+  if (!ref) return x;
+  // Natural speech keeps its "s" a few dB under its vowels.
+  const limit = ref * 10 ** (-4 / 10);
+  // Gain per frame in dB: instant down, back up at 1.5 dB a frame (about 40 ms to recover 6 dB).
+  let g = 0;
+  let cut = 0;
+  let deepest = 0;
+  for (let f = 0; f < frames; f++) {
+    const want = sib[f] > limit ? Math.max(-15, 10 * Math.log10(limit / sib[f])) : 0;
+    g = want < g ? want : Math.min(want, g + 1.5);
+    const [re, im] = spectra[f];
+    if (g < -0.5) cut++;
+    deepest = Math.min(deepest, g);
+    if (g < -0.05) {
+      const lin = 10 ** (g / 20);
+      for (let k = edge; k <= n / 2; k++) {
+        // A soft edge from 3.5 to 4.5 kHz, full cut above.
+        const m = k >= s0 ? lin : 1 + (lin - 1) * ((k - edge) / (s0 - edge));
+        re[k] *= m;
+        im[k] *= m;
+        if (k > 0 && k < n / 2) {
+          re[n - k] *= m;
+          im[n - k] *= m;
+        }
+      }
+    }
+    fft(re, im, true);
+    for (let i = 0; i < n; i++) if (f * hop + i < out.length) out[f * hop + i] += re[i] * win[i];
+  }
+  if (stats) Object.assign(stats, { share: frames ? cut / frames : 0, deepest });
+  return out;
+}
+
+// De-esses a generated voiceover file in place.
+export function deEssFile(file) {
+  const stats = {};
+  writeFileSync(file, wav([deEss(samples(file), 48000, stats)], 48000).buf);
+  return stats;
 }
 
 // Syllables in a text, from its vowel groups: the unit a listener hears pace in, across languages written in Latin
@@ -646,7 +787,7 @@ export function defaultEngine({ voice, reference, language } = {}) {
   const vox = voxcpmReady();
   if (vox.ok || reference) return 'voxcpm';
   if (language && !/^en/i.test(language)) {
-    throw new Error(`speak --language ${language}: Kokoro speaks English only, and VoxCPM2 ${vox.why}. Pass --model facebook/mms-tts-<iso> (CPU, non-commercial license) or --command with the user's TTS (references/tts.md).`);
+    throw new Error(`speak --language ${language}: Kokoro speaks English only, and VoxCPM2 ${vox.why}. Use the user's TTS (--command), a recording, or a Hugging Face model whose license allows the video's use (--model, references/tts.md).`);
   }
   return 'kokoro';
 }

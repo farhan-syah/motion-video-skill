@@ -144,7 +144,15 @@ test('data units and split compounds count as heard', async () => {
   const a = checkSpeech(w('It needs 8GB of memory.'), 'It needs eight gigabytes of memory.');
   assert.ok(a.ok);
   assert.deepEqual(a.unsure, []);
-  const b = checkSpeech(w('Meta MMS -TTS speaks many languages.'), 'Meta MMS-TTS speaks many languages.');
+  const b = checkSpeech(w('The cafe has free Wi -Fi for every guest.'), 'The cafe has free Wi-Fi for every guest.');
   assert.ok(b.ok);
   assert.deepEqual(b.unsure, []);
+});
+
+test('a word the recognizer split apart rejoins', async () => {
+  const { checkSpeech } = await import('./voice.mjs');
+  const w = (text) => text.split(' ').map((t, i) => ({ text: t, start: i * 0.3, end: i * 0.3 + 0.25 }));
+  const c = checkSpeech(w('The airline flies non -stop to over 1 ,100 cities.'), 'The airline flies non-stop to over 1,100 cities.');
+  assert.ok(c.ok, c.why);
+  assert.deepEqual(c.extra, []);
 });

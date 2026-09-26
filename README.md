@@ -63,12 +63,12 @@ Output: `out/video.mp4` (master) and `out/video-compressed.mp4`, about a quarter
 
 **Voiceover:** your recording, a TTS file, subtitles or a script (plain or timed per line), used as given. A local Whisper model times every word, so captions and scenes follow the speech. For a script without a recording, the agent picks a local text-to-speech engine that fits your language and machine:
 
-| Engine                  | Languages                                               | Machine                          |
-| ----------------------- | ------------------------------------------------------- | -------------------------------- |
-| VoxCPM2                 | 30, with described or cloned voices                     | NVIDIA GPU with 8 GB, and `uv`   |
-| Kokoro                  | English                                                 | Any, CPU only included           |
-| Any Hugging Face model  | The model's, such as MMS-TTS in 1,100+ (non-commercial) | Any, CPU only included, and `uv` |
-| Any TTS you already use | The tool's                                              | Wherever it runs                 |
+| Engine                  | Languages                                           | Machine                          |
+| ----------------------- | --------------------------------------------------- | -------------------------------- |
+| VoxCPM2                 | 30, with described or cloned voices                 | NVIDIA GPU with 8 GB, and `uv`   |
+| Kokoro                  | English                                             | Any, CPU only included           |
+| Any Hugging Face model  | The model's, when its license allows commercial use | Any, CPU only included, and `uv` |
+| Any TTS you already use | The tool's                                          | Wherever it runs                 |
 
 The default is the best one your machine runs: VoxCPM2 with that GPU, else Kokoro. `node scripts/video.mjs doctor` shows which of these your machine runs. Languages, hardware and adding your own voice or model: `references/tts.md`.
 
@@ -115,6 +115,6 @@ MIT. See `LICENSE`.
 - transformers.js (Apache 2.0) and ONNX Runtime (MIT)
 - Kokoro-82M (Apache 2.0) and Whisper (MIT) models
 - VoxCPM2 (Apache 2.0), only with `speak --engine voxcpm`: its Python environment through `uv`, and the model unless already on disk
-- A Hugging Face model named with `speak --model`, under its own license (MMS-TTS: CC-BY-NC 4.0). A model without ONNX weights also installs a Python environment through `uv`.
+- A Hugging Face model named with `speak --model`, under its own license. A model without ONNX weights also installs a Python environment through `uv`.
 
 Fonts fetched with `font` keep their own licenses, copied next to each font.

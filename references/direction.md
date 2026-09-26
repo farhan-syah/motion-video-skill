@@ -65,13 +65,15 @@ Follow `concepts.md`: three concepts, the strongest picked, and why. The concept
 
 The story shape sets the order of beats. Every shape keeps three anchors:
 
-| Anchor   | Job                                                                                 |
-| -------- | ----------------------------------------------------------------------------------- |
-| Hook     | A strong image or line in the first 2 s. Motion from frame 0. No logo-first intros. |
-| Payoff   | The result made visible, or a before/after. A number only from the gathered facts.  |
-| End card | Logo, promise line, CTA button. Holds still for at least 1.5 s of reading.          |
+| Anchor   | Job                                                                                                                               |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Hook     | A strong image or line in the first 2 s that tells a stranger what the video is about. Motion from frame 0. No logo-first intros. |
+| Payoff   | The result made visible, or a before/after. A number only from the gathered facts.                                                |
+| End card | Logo, promise line, CTA button. Holds still for at least 1.5 s of reading.                                                        |
 
 - **Beats:** pacing and compositions: `concepts.md`.
+- **Orient first:** the first 2–3 s name the subject, on screen and in the first spoken line. A viewer who scrolled in knows what this is and why to watch before any scenario starts ("So you open the app…" assumes context the viewer lacks). A question hook still names its subject.
+- **Thumbnail frame:** frame 0 is the thumbnail on most platforms. It shows the subject or title in display type, readable as a still at phone size. Never a blank, a half-built frame, or chrome alone.
 - **Logo:** on the end card. If the brief asks to show the logo, also reveal it as a lockup right after the hook. Never open on it.
 - **Music cuts:** snap every cut to a downbeat from `out/beats.json`. Put the payoff on the biggest energy hit.
 - **Narration cuts:** the words set the clock. Size each beat to its phrases and cut in the pauses. A timed script sets the beats to its times.

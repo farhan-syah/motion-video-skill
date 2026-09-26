@@ -1,0 +1,54 @@
+# VoxCPM2
+
+OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description or cloned from a recording, 48 kHz. `speak --engine voxcpm`, the default on a machine with an NVIDIA GPU of 8 GB and `uv`.
+
+- **Languages:** Arabic, Burmese, Chinese, Danish, Dutch, English, Finnish, French, German, Greek, Hebrew, Hindi, Indonesian, Italian, Japanese, Khmer, Korean, Lao, Malay, Norwegian, Polish, Portuguese, Russian, Spanish, Swahili, Swedish, Tagalog, Thai, Turkish, Vietnamese. Also 9 Chinese dialects, Cantonese among them.
+- **First run:** `uv` builds a Python environment, and a 4.7 GB model downloads unless a checkpoint is on disk. `--device cpu` works, very slowly.
+
+## How `speak` uses it
+
+1. **The voice:** with `--voice`, it designs a reference once by speaking the script's opening (25 words or more) and saves it as `<out>.voice.wav`. With `--reference`, the user's recording is the voice.
+2. **The narration:** each beat is one generation that clones that reference. A beat is the text between blank lines or `[pause]` marks, at most 40 words. Each generation is a separate draw of the voice, so fewer, longer ones keep it steady and the delivery connected.
+3. **The check:** every beat is heard back. A failing beat regenerates under a new seed, up to 3 tries, and the best take is kept. A beat that fails every take is spoken sentence by sentence.
+
+## The voice
+
+- **Describe it** in English in three layers. Who: gender, age, role. Texture: pitch, timbre. Delivery: emotion and scenario. The words steer the read: presenter words ("friendly", "confident", "energetic") give an ad read, and a scenario ("talking to one person", "telling a story at night") gives its own delivery.
+
+  | Narration          | Example `--voice` (a range, never a menu)                                                                               |
+  | ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+  | Lesson or tutorial | `"(A man in his thirties with a deep, warm voice. Calm and unhurried, explaining something to one person he knows.)"`   |
+  | Product launch     | `"(A woman in her late twenties with a bright, clear voice. Upbeat and confident, presenting a new product on stage.)"` |
+  | Documentary        | `"(An older man with a low, textured voice. Measured and thoughtful, narrating a nature documentary.)"`                 |
+  | Children's story   | `"(A young woman with a soft, gentle voice. Playful and warm, reading a bedtime story to a child.)"`                    |
+
+- **Always design one.** Without `--voice` or `--reference`, the model picks its own voice.
+- **Listen to `<out>.voice.wav` first.** If it is wrong, change `--voice` or `--seed`. A new seed designs a new voice.
+- **Clone** with `--reference voice.wav`: 5 to 30 s of clean speech, only the user's voice or one they have consent for. Cloning is the sure way to a specific accent: a described voice drifts toward the model's most common accent.
+- **One voice holds:** every `speak` call with the same `--voice`, `--seed` and `--language` clones the same reference, so per-scene files match. `--reference <out>.voice.wav` gives another video the same voice.
+
+## Delivery
+
+- **Write an instruction as sound:** tone, emotion and pace, the way VoxCPM2's guide does: `(slightly faster, cheerful tone)`, `(speaking very fast, bright and full)`. Describe how the voice behaves, never what the line means: `(curious tone, rising intonation)`, not `(asking a question)`.
+- **`--style "(calm, warm tone, unhurried pace)"`** steers every generation. It changes emotion, pace and delivery, never the voice.
+- **Delivery notes** open a line and replace `--style` for that line only. Keep one word of the base tone, then the change and how the voice moves: `(calm, curious tone, rising intonation) Where does the water go?`, `(calm, a little brighter) It worked the first time.`. A note without the base tone swings the line far from the rest, and one appended to a long style is outweighed by it. The line becomes its own generation, since an instruction covers everything a generation speaks. Give every question and every change of tone its note: a line spoken in the beat's delivery reads a question as a statement.
+- **Results vary between runs:** re-roll a line whose delivery misses (`--reroll`), up to 3 times.
+- **Non-verbal tags**, written where the sound happens: `[laughing]`, `[sigh]`, `[Uhm]`, `[Shh]`, `[Question-ah]`, `[Question-ei]`, `[Question-en]`, `[Question-oh]`, `[Surprise-wa]`, `[Surprise-yo]`, `[Dissatisfaction-hnn]`. Use them rarely, at most one per sentence, in lowercase where the tag has it.
+- Notes and tags are never shown in captions or checked.
+
+## Writing for it
+
+- **Pauses inside a beat** come from punctuation: a period or question mark gives a clear pause, a comma a short one, "…" a hesitation. Split a sentence for a stronger pause. Only blank lines and `[pause]` marks are exact.
+- **Short beats:** a beat of one or two words fails far more often. Join it to the line before or after.
+- **Numbers:** in languages other than English, write them as words.
+
+## Takes and settings
+
+- **Takes are cached** by voice, delivery, text and seed (`~/.cache/motion-video/speak/voxcpm`). A re-run speaks only changed beats.
+- **`<out>.takes.json`** records each chosen take and the voice's seed. A later run without `--seed` keeps both. A different `--seed` starts over. Keep the file beside the audio: moving the old audio aside keeps its takes only when this file stays.
+- **A part's first seed comes from its text,** so adding or splitting a line leaves every other part's take as it was.
+- **`--reroll 3,5`** draws new takes for those beats. The earlier take stays in the running, so a worse draw never replaces it.
+- **`--cfg 1.6 --steps 16`** by default. Guidance 1.0–2.0 is relaxed and natural, and above 2.0 follows the text more strictly with more noise. More steps (up to 30) are more natural and slower.
+- **Checkpoint:** loads offline from `"tts": { "checkpoint": "/path" }`, the model folder, or the Hugging Face cache. `doctor` names the one it finds.
+- **Out of GPU memory:** `speak` says how much is free. Another process holds the rest (`nvidia-smi` lists it).
+- **Quantized (GGUF):** run its runner through `--command` (`command.md`), shaped like `"<runner> --gguf voxcpm2-q6_k.gguf --text {text} --ref {reference} --out {out}"`.

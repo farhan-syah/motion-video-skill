@@ -96,5 +96,5 @@ Also check one frame mid-entrance with `still <t>`: it shows overlaps a resting 
 ## Final pass
 
 - **Sheet:** `render` writes `out/sheet.png`. Open it.
-- **Opening:** the first frame shows the hook, not a blank or a logo.
+- **Opening:** the first frame works as a thumbnail: the subject or title readable as a still, not a blank, a logo or chrome. By 3 s, a stranger knows what the video is about.
 - **End card:** it holds long enough to read, and the video ends on it.

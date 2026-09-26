@@ -27,7 +27,7 @@ Tool: `node <skill-dir>/scripts/video.mjs <command>`, run from the project direc
 7. **Check each scene.** After writing or editing a scene, run `check --scene N`. Open its still sheet with Read and fix what fails `references/craft.md`. Fix every finding of a pass in one edit before running again. A warning stays only for a deliberate choice.
 8. **Render.** Run `render --draft` once every scene passes, and again after each fix. Run the full `render` once the draft passes review. With a `sound.bed`, compare the no-bed copy, or tell the user to.
 9. **Review.** Open `out/sheet.png` and, with effects, `out/audit.png`. Compare each cue's intent with its thumbnail. Fix each failing cue and false intent label, then render again. Listen to the mix when playback is available, and report when it was not.
-10. **Deliver.** Report the master and the `-compressed.mp4` copy.
+10. **Deliver.** Open `out/thumbnail.png` (frame 0) and check it reads as a thumbnail. Report the master, the `-compressed.mp4` copy and the thumbnail.
 
 ## Non-negotiables
 
@@ -49,6 +49,7 @@ Tool: `node <skill-dir>/scripts/video.mjs <command>`, run from the project direc
 | Writing scenes, the kit (icons, atmospheres, UI parts, leader lines), 3D, footage and libraries, the seek contract, the camera | `references/building.md`         |
 | Voiceover, text to speech, word timing, captions                                                                               | `references/narration.md`        |
 | Choosing a TTS engine for a language or machine, adding a voice or model                                                       | `references/tts.md`              |
+| Using one TTS engine: its voice, delivery and writing rules                                                                    | `references/tts/<engine>.md`     |
 | Finding an icon name                                                                                                           | `references/icons.txt` (grep it) |
 | Thresholds, and the visual review of sheets                                                                                    | `references/craft.md`            |
 | Commands, flags, `video.json` fields, setup errors                                                                             | `references/cli.md`              |

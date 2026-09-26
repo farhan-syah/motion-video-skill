@@ -15,7 +15,7 @@ the reference for every later part.
 
 Usage: uv run voxcpm_speak.py --sentences list.json --dir DIR [--voice "(A calm male narrator)"]
        [--reference voice.wav] [--style "(relaxed, explaining)"] [--cfg 2.0] [--steps 10] [--model openbmb/VoxCPM2]
-       list.json: [{"index": 0, "text": "...", "seed": 7}, ...]
+       list.json: [{"index": 0, "text": "...", "seed": 7, "style": "(optional delivery for this part)"}, ...]
 """
 import argparse
 import json
@@ -60,7 +60,8 @@ def main():
         # The seed makes a take repeatable: the same sentence and seed give the same audio.
         torch.manual_seed(s["seed"])
         if anchor:
-            wav = model.generate(text=f"{style}{s['text']}", reference_wav_path=anchor, cfg_value=a.cfg, inference_timesteps=a.steps)
+            # A part's own delivery note ("(asking a question)") replaces --style for it.
+            wav = model.generate(text=f"{paren(s.get('style', '')) or style}{s['text']}", reference_wav_path=anchor, cfg_value=a.cfg, inference_timesteps=a.steps)
         else:
             wav = model.generate(text=f"{voice}{s['text']}", cfg_value=a.cfg, inference_timesteps=a.steps)
             # The first designed sentence becomes the voice every later sentence clones.

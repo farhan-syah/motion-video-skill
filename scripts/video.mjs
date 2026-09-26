@@ -73,7 +73,8 @@ Commands:
 
 Options:
   --manifest PATH                Manifest path. Default: ./video.json
-  --scene NAME                   One scene: 1-based index or file basename. Other scene files may be missing.
+  --scene NAME                   One scene: its name, the number its file name starts with (2 for 02-engines), or its
+                                 1-based place when names carry no number. Other scene files may be missing.
 `;
 
 function num(flag, v, min) {
@@ -317,6 +318,11 @@ async function speakCmd(opts) {
   const { pace } = await import('./lib/speak.mjs');
   const { config } = await import('./lib/paths.mjs');
   const target = opts.pace ?? config().tts?.pace ?? 4.1;
+  // Generated speech often makes its "s" louder than its vowels, which sounds harsh: every engine's output is de-essed.
+  // A user's own recording never passes through here.
+  const { deEssFile } = await import('./lib/speak.mjs');
+  const ess = deEssFile(out);
+  console.log(ess.share > 0 ? `De-essed: harsh "s" sounds turned down in ${(ess.share * 100).toFixed(1)}% of the audio, by up to ${(-ess.deepest).toFixed(1)} dB.` : 'De-essed: no harsh "s" sounds found.');
   // The verdict judges the value as printed, so a pace on the range's edge never reads as outside it.
   const rate = phrases ? Math.round(pace(phrases, out) * 10) / 10 : null;
   // The suggestion aims at the target and scales the speed this take was made with.
@@ -736,6 +742,12 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs }, op
   }
   rmSync(work, { recursive: true, force: true });
   console.log(`wrote ${output} (${total.toFixed(2)}s, ${Math.round(m.width * scale)}x${Math.round(m.height * scale)} @ ${m.fps}fps)`);
+  // The whole video's frame 0 is its thumbnail on most platforms: written beside it, to review as a still.
+  if (output === m.output) {
+    const thumb = join(dirname(output), 'thumbnail.png');
+    spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', output, '-frames:v', '1', thumb]);
+    if (existsSync(thumb)) console.log(`wrote ${thumb} (frame 0, the thumbnail on most platforms)`);
+  }
   // A full render also writes a compressed copy next to the master, small enough for chat apps and social uploads.
   if (!draft && output === m.output) {
     const { compressedCopy } = await import('./lib/encode.mjs');

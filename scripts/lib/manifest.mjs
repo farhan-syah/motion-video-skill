@@ -220,8 +220,13 @@ function bedDirection(path, raw) {
 export function pickScenes(m, key) {
   let picked = m.scenes;
   if (key != null) {
-    const s = /^\d+$/.test(key) ? m.scenes[Number(key) - 1] : m.scenes.find((x) => x.name === key || x.file === resolve(key));
-    if (!s) throw new ManifestError(`No scene "${key}" in ${m.path}. Use an index 1-${m.scenes.length} or a name: ${m.scenes.map((x) => x.name).join(', ')}.`);
+    // A number matches the number a scene's name starts with ("2" is 02-engines, even when numbering starts at 00),
+    // and falls back to the 1-based place for names without one.
+    const numbered = (x) => /^(\d+)[-_]/.exec(x.name)?.[1];
+    const s = /^\d+$/.test(key)
+      ? (m.scenes.find((x) => numbered(x) != null && Number(numbered(x)) === Number(key)) ?? (m.scenes.some((x) => numbered(x) != null) ? null : m.scenes[Number(key) - 1]))
+      : m.scenes.find((x) => x.name === key || x.file === resolve(key));
+    if (!s) throw new ManifestError(`No scene "${key}" in ${m.path}. Use a scene number or name: ${m.scenes.map((x) => x.name).join(', ')}.`);
     picked = [s];
   }
   const missing = picked.filter((s) => s.missing);

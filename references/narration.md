@@ -29,13 +29,14 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
 - **Script first:** when the skill writes the script, it comes before any audio. Every fact in it comes from the gathered facts (`direction.md`, §0).
 - **Native wording:** write in the audience's spoken language, never translated from English. Use a native short-video narrator's words, not textbook register. Follow a writing skill for that language when one exists.
 - **Spoken, not read:** short phrases, one per line, with a beat before a number or a reveal.
+- **First line orients:** it names the subject or the question, before any scenario ("Three ways to cut your water bill.", not "So you open the app.").
 - **Pace:** `speak` aims at about 4.1 syllables per second while speaking (3.5 to 4.7), a relaxed explainer. Match it to the narration: a lesson reads slower, a launch or an ad faster. A natural take inside the range needs no `--speed`. `speak` prints the pace and the `--speed` that reaches it (`0.85` is 15% slower, pitch kept). `--pace 4.2` sets another target, for a calmer or brisker read. `"tts": { "speed": 0.9, "pace": 4.3 }` sets both for every video.
 
 ## Text to speech
 
 `speak script.txt` writes `assets/voiceover.wav`, and `assets/voiceover.txt` beside it without the pause marks (for captions and `transcribe`). A source script at that path keeps its marks: the spoken words then go to `voiceover.spoken.txt`. Set `"voiceover": { "file": …, "script": … }` as `speak` prints it.
 
-- **Engine:** the best this machine runs by default: VoxCPM2 (30 languages, NVIDIA GPU), else Kokoro (English, CPU). `--engine kokoro|voxcpm`, `--model <Hugging Face id>` (any language a model speaks, CPU) or `--command` (any TTS). Choosing one, languages, hardware and adding a new voice: `references/tts.md`.
+- **Engine:** choosing one, and the steps for any engine: `references/tts.md`. Each engine's voice, delivery and writing rules: its guide in `references/tts/`.
 
 ### Pauses
 
@@ -46,14 +47,12 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
 | Sentence end inside a line | 0.3 s                          |
 | `[pause]` / `[pause 1.2]`  | 0.6 s / exactly 1.2 s          |
 
-- **Kokoro, `--model` and `--command`** speak each phrase alone and join them with these pauses. `--command … --one-call` gets the whole script as one text, without the marks.
-- **VoxCPM2** speaks each beat whole, so only blank lines and `[pause]` marks are exact there. Inside a beat, its punctuation sets the pauses: a period or question mark a clear pause, a comma a short one, "…" a hesitation. Split a sentence for a stronger pause.
+Kokoro, Hugging Face models and the user's TTS keep every mark exact. VoxCPM2 keeps blank lines and `[pause]` exact, and sets the pauses inside a beat from its punctuation (`tts/voxcpm2.md`).
 
 ### Writing for a generated voice
 
-- **Numbers:** in other languages, write them as words ("sembilan belas lima puluh"). A voice can read digits in English. Captions still show the spoken words.
-- **Short phrases:** VoxCPM2 garbles a beat of one or two words far more often. Join it to the line before or after.
-- **Non-verbal tags (VoxCPM2):** `[laughing]`, `[sigh]`, `[Uhm]`, `[Shh]`, `[Question-ah]`, `[Question-ei]`, `[Question-en]`, `[Question-oh]`, `[Surprise-wa]`, `[Surprise-yo]`, `[Dissatisfaction-hnn]`, written where the sound happens. Use them rarely, at most one per sentence. Captions and the speech check leave them out, and other engines drop them.
+- **Numbers:** in languages other than English, write them as words. A voice can read digits in English. Captions show the spoken words.
+- **Engine rules:** delivery notes, tags and other engine-specific writing live in the engine's guide.
 
 ### Speech check
 
@@ -61,19 +60,16 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
 
 - **Words:** extra speech (babble after the text, a stray word) and missing words.
 - **Numbers:** every number must be heard as the script says it.
-- **Glitches:** a click, a thump before or after the speech, and a take cut off mid-sound. Every take's edges fade over a few milliseconds, so joins never click.
+- **Glitches (VoxCPM2):** a click, a thump before or after the speech, and a take cut off mid-sound. Every take's edges fade over a few milliseconds, so joins never click.
 - **Doubtful words:** when a passing phrase has words heard differently, a second Whisper model hears it too. A word both models miss is marked `ok ?`: listen to it.
 
-- **VoxCPM2:** each phrase is checked alone. A failing phrase regenerates under a new seed, up to 3 tries, keeping the best take. Other engines get one check of the whole file.
-- **Output:** every phrase as heard. A remaining problem prints its fix and exits 1: reword the phrase, or `--reroll` it. Re-roll a passing phrase whose key word (a name, a number) is wrong.
+- **Per engine:** VoxCPM2 checks each beat and retries a failing one. Other engines get one check of the whole file.
+- **Output:** every part as heard. A remaining problem prints its fix and exits 1: reword it, or re-roll it where the engine allows (`tts/voxcpm2.md`).
 - **`--language`** sets the recognizer's language.
 
-### Takes and phrase spans
+### Phrase spans
 
-- **Takes are kept** by text, voice and seed (`~/.cache/motion-video/speak`). A re-run speaks only changed phrases. Every other phrase keeps its exact audio.
-- **Chosen takes are recorded** in `voiceover.takes.json` with the voice's seed, re-rolls included. A later run (a new `--speed`, one reworded line) keeps them and the seed, so `--seed` is needed only once. A different `--seed` starts over.
-- **`--reroll 3,10`** draws new takes for those phrases alone. The earlier take stays in the running, so a worse draw never replaces it.
-- **Phrase spans:** `speak` writes where each phrase sits in the audio (`voiceover.phrases.json`). `transcribe` keeps each phrase's words inside its span, so no word drifts across a pause.
+`speak` writes where each phrase sits in the audio (`voiceover.phrases.json`). `transcribe` keeps each phrase's words inside its span, so no word drifts across a pause.
 
 ## Time the picture to the words
 

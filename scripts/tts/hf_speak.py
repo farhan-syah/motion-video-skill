@@ -11,11 +11,11 @@
 """Narration with any Hugging Face model the transformers text-to-speech pipeline loads, on the CPU.
 
 Run by `video.mjs speak --model ID` through `uv run` when the model has no ONNX weights for transformers.js.
-Covers Meta's MMS-TTS voices (facebook/mms-tts-<iso>, over 1,100 languages), Bark, SpeechT5 and the like.
+Use only a model whose license allows the video's use.
 The model loads once and speaks each sentence of a JSON list into its own WAV: seg-000.wav, seg-001.wav, ... in --dir.
 Torch comes from the CPU wheel index: a small TTS model runs fast on the CPU and needs no GPU.
 
-Usage: uv run hf_speak.py --sentences list.json --dir DIR --model facebook/mms-tts-zlm
+Usage: uv run hf_speak.py --sentences list.json --dir DIR --model <model id>
        list.json: [{"index": 0, "text": "...", "seed": 7}, ...]
 """
 import argparse
@@ -43,7 +43,7 @@ def main():
 
     tts = pipeline("text-to-speech", model=a.model, device="cpu")
     for n, s in enumerate(todo):
-        # The seed makes a take repeatable: MMS and other sampling models vary between runs otherwise.
+        # The seed makes a take repeatable: sampling models vary between runs otherwise.
         torch.manual_seed(s.get("seed", 7))
         out = tts(s["text"])
         wav = np.asarray(out["audio"], dtype=np.float32).squeeze()

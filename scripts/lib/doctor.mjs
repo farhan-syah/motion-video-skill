@@ -128,7 +128,7 @@ export async function doctor(root) {
   const vox = voxcpmReady();
   const uv = first('uv', ['--version']);
   say('uv', uv ?? 'not found: VoxCPM2 and PyTorch-only --model voices need it to build their Python environment (https://docs.astral.sh/uv)');
-  say('cpu voices', uv ? '--model facebook/mms-tts-<iso> speaks 1,100+ languages on the CPU, non-commercial use only (first run builds a 1.1 GB Python environment)' : 'English only (Kokoro). Install uv for --model voices in other languages');
+  say('cpu voices', uv ? '--model <id> runs a Hugging Face TTS model on the CPU, one whose license allows the video\'s use (references/tts/huggingface.md). First run builds a 1.1 GB Python environment' : 'English only (Kokoro). Install uv to run Hugging Face TTS models (https://docs.astral.sh/uv)');
   let ckpt;
   try {
     ckpt = voxcpmCheckpoint();
@@ -142,11 +142,9 @@ export async function doctor(root) {
     ? `${engine} (from the config)`
     : vox.ok
       ? 'VoxCPM2, the best engine here: 30 languages. Design its voice with --voice "(…)". --engine kokoro only for a fast English draft.'
-      : `Kokoro, English only: VoxCPM2 ${vox.why}. Other languages: ${uv ? '--model facebook/mms-tts-<iso>' : 'the user\'s TTS (--command) or a recording'} (references/tts.md).`);
+      : `Kokoro, English only: VoxCPM2 ${vox.why}. Other languages: the user's TTS (--command), a recording, or a Hugging Face model whose license allows the video's use (references/tts.md).`);
   if (!vox.ok && !cfg.tts?.command && !cfg.tts?.model) {
-    limits.push(uv
-      ? `narration in a language other than English: only MMS-TTS on the CPU (--model facebook/mms-tts-<iso>), one plain voice per language, non-commercial use only. VoxCPM2 ${vox.why}. A recording or the user's TTS (speak --command) sounds better.`
-      : `narration in a language other than English: no engine here (VoxCPM2 ${vox.why}, and no uv for --model voices). Ask for the user's TTS (speak --command) or a recording.`);
+    limits.push(`narration in a language other than English: no built-in engine here (VoxCPM2 ${vox.why}). Ask for the user's TTS (speak --command) or a recording${uv ? ', or use a Hugging Face model whose license allows the video\'s use (speak --model)' : ''}.`);
   }
   const gpuNow = vox.ok ? (await import('./speak.mjs')).nvidiaGpu() : null;
   if (gpuNow && gpuNow.freeGb < 7.5) limits.push(`the GPU has ${gpuNow.freeGb.toFixed(1)} GB free now, and VoxCPM2 needs about 8 GB. Another process holds the rest (nvidia-smi lists it): speak with VoxCPM2 once it ends.`);
