@@ -6,7 +6,7 @@
 // Flags choose, else "tts" in ~/.config/motion-video/config.json.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -184,6 +184,80 @@ export function voxcpmCheckpoint() {
 }
 
 // Decodes an audio file to 48 kHz mono float samples.
+// A generated take can carry glitches a listener hears at once. None is edited out, since a glitch and a real sound
+// (the "de" of "dekat") can look alike: the take fails and is regenerated. Tidying only fades each edge (10 ms in,
+// 25 ms out), so no take starts or stops on a click. Returns { samples, faults } with faults in words.
+export function tidy(x, rate = 48000) {
+  const hop = Math.round(rate / 100);
+  const env = [];
+  // Brightness per frame: high-frequency energy against all of it. A consonant ("t", "s", "k") is bright, a thump dark.
+  const bright = [];
+  for (let i = 0; i + hop <= x.length; i += hop) {
+    let e = 0;
+    let d = 0;
+    for (let k = i; k < i + hop; k++) {
+      e += x[k] * x[k];
+      if (k) d += (x[k] - x[k - 1]) ** 2;
+    }
+    env.push(Math.sqrt(e / hop));
+    bright.push(10 * Math.log10(d / (e + 1e-12) + 1e-12));
+  }
+  let peak = 1e-9;
+  for (const v of env) peak = Math.max(peak, v);
+  const loud = env.map((v) => v > peak * 10 ** (-40 / 20));
+  const runs = [];
+  for (let f = 0; f < loud.length; f++) {
+    if (!loud[f]) continue;
+    let g = f;
+    while (g + 1 < loud.length && loud[g + 1]) g++;
+    runs.push([f, g]);
+    f = g;
+  }
+  const faults = [];
+  const mean = (a, b) => bright.slice(a, b + 1).reduce((t, v) => t + v, 0) / (b - a + 1);
+  // A thump: a burst under 70 ms, dark, set apart from the speech by 40 ms or more, at either edge.
+  const thump = (run, next) => run && next && run[1] - run[0] + 1 < 7 && mean(run[0], run[1]) < -16 && Math.abs(next[0] - run[1]) >= 4;
+  if (runs.length > 1 && thump(runs[0], runs[1])) faults.push(`a thump before the speech at ${((runs[0][0] * hop) / rate).toFixed(2)}s`);
+  if (runs.length > 1 && thump(runs[runs.length - 1], [runs[runs.length - 2][1]])) faults.push(`a thump after the speech at ${((runs[runs.length - 1][0] * hop) / rate).toFixed(2)}s`);
+  // Cut off: the take ends while still loud, mid-sound.
+  // A clean take fades to silence. One whose last 30 ms still sound within 30 dB of its peak stops mid-sound.
+  // A natural ending decays over its last frames. A cut-off one is still at full strength when the audio stops.
+  const n = env.length;
+  if (n > 3 && env.slice(-3).every((v) => v > peak * 10 ** (-30 / 20)) && env[n - 1] > 0.5 * env[n - 3]) faults.push('it stops mid-sound, cut off');
+  const out = new Float32Array(x);
+  const fadeIn = Math.min(out.length, Math.round(rate * 0.01));
+  const fadeOut = Math.min(out.length, Math.round(rate * 0.025));
+  for (let k = 0; k < fadeIn; k++) out[k] *= k / fadeIn;
+  for (let k = 0; k < fadeOut; k++) out[out.length - 1 - k] *= k / fadeOut;
+  return { samples: out, faults };
+}
+
+// Clicks in a take: impulses a few milliseconds wide, far sharper than any speech sound around them (found in the
+// second difference, which an impulse dominates and a voice does not). Returns their times in seconds.
+export function clicks(x, rate = 48000) {
+  const hop = Math.round(rate / 500);
+  const e = [];
+  for (let i = 0; i + hop < x.length; i += hop) {
+    let s = 0;
+    for (let k = Math.max(2, i); k < i + hop; k++) {
+      const d = x[k] - 2 * x[k - 1] + x[k - 2];
+      s += d * d;
+    }
+    e.push(Math.sqrt(s / hop));
+  }
+  const edge = 2;
+  const out = [];
+  for (let f = edge; f < e.length - edge; f++) {
+    if (e[f] < 0.01 || e[f] < e[f - 1] || e[f] < e[f + 1]) continue;
+    const near = [];
+    for (let k = f - 75; k <= f + 75; k++) if (k >= 0 && k < e.length && Math.abs(k - f) > 3) near.push(e[k]);
+    near.sort((a, b) => a - b);
+    const p90 = near[Math.floor(near.length * 0.9)] || 1e-9;
+    if (e[f] > 6 * p90 && (!out.length || (f * hop) / rate - out[out.length - 1] > 0.05)) out.push(+((f * hop) / rate).toFixed(2));
+  }
+  return out;
+}
+
 function samples(file) {
   const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', file, '-ac', '1', '-ar', '48000', '-f', 'f32le', '-'], { maxBuffer: 1 << 30 });
   if (r.status !== 0) throw new Error(`speak: ffmpeg cannot decode ${file}.`);
@@ -195,7 +269,7 @@ function samples(file) {
 const clip = (t, n = 140) => (t.length > n ? `${t.slice(0, n)}…` : t);
 
 async function heardCheck(file, text, language) {
-  const { transcribe, checkSpeech, asrModel, SMALL_MODEL } = await import('./voice.mjs');
+  const { transcribe, checkSpeech, asrModel, DEFAULT_MODEL, SMALL_MODEL } = await import('./voice.mjs');
   const model = asrModel(language);
   let t = await transcribe(file, { model, language });
   let c = checkSpeech(t.words, text);
@@ -204,14 +278,22 @@ async function heardCheck(file, text, language) {
     t = await transcribe(file, { model: SMALL_MODEL, language });
     c = checkSpeech(t.words, text);
   }
-  return { ...c, heard: clip(t.words.map((w) => w.text).join(' ')) };
+  // A passing take with words heard differently gets a second opinion from the other model. A word both models hear
+  // differently is likely said wrong (listen to it). One heard right by either is likely the recognizer's slip.
+  let doubt = [];
+  if (c.ok && c.unsure.length) {
+    const other = model === SMALL_MODEL ? DEFAULT_MODEL : SMALL_MODEL;
+    const c2 = checkSpeech((await transcribe(file, { model: other, language })).words, text);
+    doubt = c.unsure.filter((w) => c2.unsure.includes(w));
+  }
+  return { ...c, doubt, heard: clip(t.words.map((w) => w.text).join(' ')) };
 }
 
 // VoxCPM2 through its runner (scripts/tts/voxcpm_speak.py). uv builds the Python environment on first use (PyTorch,
 // several GB). The model loads from a checkpoint already on disk, offline, and downloads into the model folder only
 // when none exists. Each sentence is its own take, transcribed back and checked. A failed take is regenerated with
 // another seed, up to 3 tries, and the best take of each sentence is kept.
-async function voxcpm(script, { voice = '', reference = '', device, seed = 7, language, reroll = [] }, out) {
+async function voxcpm(script, { voice = '', reference = '', device, seed = 7, freshSeed = false, language, reroll = [] }, out) {
   const ready = voxcpmReady();
   if (!ready.ok && !device) throw new Error(`speak --engine voxcpm ${ready.why}. Use the default Kokoro engine, another TTS with --command, or --device cpu (very slow).`);
   const units = phrases(script);
@@ -261,22 +343,52 @@ async function voxcpm(script, { voice = '', reference = '', device, seed = 7, la
       generate([first], true);
       copyFileSync(join(dir, 'anchor.wav'), anchorFile);
     }
-    // A re-rolled phrase draws a fresh seed, printed so the take can be found again.
+    // The take chosen for each phrase is recorded beside the audio, so a later run (a new speed, one reworded line)
+    // keeps it, re-rolled takes included. An explicit --seed starts over. A re-rolled phrase draws a fresh seed.
+    const record = out.replace(/\.[^./]+$/, '') + '.takes.json';
+    let chosen = {};
+    try {
+      chosen = freshSeed ? {} : JSON.parse(readFileSync(record, 'utf8'));
+    } catch {}
     const fresh = new Map(reroll.map((n) => [n - 1, 100000 + Math.floor(Math.random() * 900000)]));
     const best = new Array(said.length).fill(null);
-    let todo = said.map((text, index) => ({ index, text, seed: fresh.get(index) ?? seed + index }));
+    // A take, tidied (edges faded) and heard: the check hears what is used. Glitches a listener hears (clicks, a
+    // thump, a cut-off end) fail the take like a wrong word does.
+    const judge = async (s) => {
+      const take = takeFile(s);
+      const tidied = take.replace(/\.wav$/, '.tidy.wav');
+      const t = tidy(samples(take));
+      if (!existsSync(tidied)) writeFileSync(tidied, wav([t.samples], 48000).buf);
+      const c = await heardCheck(tidied, s.text, language);
+      const pops = clicks(t.samples);
+      const faults = [...t.faults, ...(pops.length ? [`a click at ${pops.map((v) => `${v}s`).join(', ')} into the phrase`] : [])];
+      if (faults.length) {
+        c.ok = false;
+        c.why = [c.why, ...faults].filter(Boolean).join(', ');
+        c.badness = (c.badness ?? 0) + faults.length;
+      }
+      return { ...c, file: tidied, seed: s.seed };
+    };
+    // A re-rolled phrase competes with the take it had: a worse draw never replaces a better one.
+    for (const i of fresh.keys()) {
+      const prev = chosen[said[i]];
+      if (prev != null && existsSync(takeFile({ text: said[i], seed: prev }))) best[i] = await judge({ index: i, text: said[i], seed: prev });
+    }
+    let todo = said.map((text, index) => ({ index, text, seed: fresh.get(index) ?? chosen[text] ?? seed + index }));
     for (const [i, s] of fresh) console.error(`speak: phrase ${i + 1} re-rolled with seed ${s}.`);
     for (let attempt = 0; attempt < 3 && todo.length; attempt++) {
       const missing = todo.filter((s) => !existsSync(takeFile(s)));
       if (missing.length) generate(missing);
+      const made = new Set(missing.map((s) => s.index));
       const again = [];
       for (const s of todo) {
-        const take = takeFile(s);
-        const c = await heardCheck(take, s.text, language);
-        if (!best[s.index] || c.badness < best[s.index].badness) best[s.index] = { ...c, file: take, seed: s.seed };
+        const c = await judge(s);
+        if (!best[s.index] || c.badness < best[s.index].badness) best[s.index] = c;
         if (!c.ok) {
-          console.error(`speak: phrase ${s.index + 1} (seed ${s.seed}): ${c.why}. Heard: "${c.heard}".${attempt < 2 ? ' Regenerating.' : ''}`);
-          again.push({ ...s, seed: s.seed + 1000 });
+          const retry = { ...s, seed: s.seed + 1000 };
+          // Say why whenever a new take follows, or this one is new. A cached failure with a cached retry is quiet.
+          if (made.has(s.index) || (attempt < 2 && !existsSync(takeFile(retry)))) console.error(`speak: phrase ${s.index + 1} (seed ${s.seed}): ${c.why}. Heard: "${c.heard}".${attempt < 2 ? ' Regenerating.' : ''}`);
+          again.push(retry);
         }
       }
       todo = again;
@@ -284,13 +396,14 @@ async function voxcpm(script, { voice = '', reference = '', device, seed = 7, la
     const parts = best.flatMap((b, i) => [samples(b.file), new Float32Array(Math.round(units[i].pause * 48000))]);
     const r = wav(parts, 48000);
     writeFileSync(out, r.buf);
+    writeFileSync(record, JSON.stringify(Object.fromEntries(best.map((b, i) => [said[i], b.seed])), null, 1));
     const failed = best.map((b, i) => ({ ...b, i })).filter((b) => !b.ok);
     const placed = spans(units, parts, 48000);
     return {
       duration: r.duration,
       phrases: placed,
-      checks: best.map((b, i) => ({ at: placed[i].start, text: said[i], ok: b.ok, heard: b.heard, why: b.why, seed: b.seed })),
-      problems: failed.map((b) => `phrase ${b.i + 1} "${said[b.i]}": ${b.why} (heard "${b.heard}"). Reword it, or draw new takes with --reroll ${b.i + 1}.`),
+      checks: best.map((b, i) => ({ at: placed[i].start, text: said[i], ok: b.ok, heard: b.heard, why: b.why, seed: b.seed, doubt: b.doubt ?? [] })),
+      problems: failed.map((b) => `phrase ${b.i + 1} "${said[b.i]}": ${b.why} (heard "${b.heard}"). Three takes failed, so reword it first (a longer line, another word order). --reroll ${b.i + 1} draws new takes.`),
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -377,7 +490,7 @@ export async function speak(script, out, opts = {}) {
   const engine = opts.engine ?? (opts.command || opts.model ? null : tts.engine);
   if (engine === 'voxcpm') {
     const voice = opts.voice ?? tts.voice ?? '';
-    const r = await voxcpm(script, { voice, reference: opts.reference ?? tts.reference ?? '', device: opts.device, seed: opts.seed ?? tts.seed ?? 7, language: opts.language, reroll: opts.reroll ?? [] }, out);
+    const r = await voxcpm(script, { voice, reference: opts.reference ?? tts.reference ?? '', device: opts.device, seed: opts.seed ?? tts.seed ?? 7, freshSeed: opts.seed != null, language: opts.language, reroll: opts.reroll ?? [] }, out);
     return { ...r, engine: `VoxCPM2${voice ? ` ${voice}` : ''}` };
   }
   if (engine && engine !== 'kokoro') throw new Error(`speak --engine "${engine}": use kokoro or voxcpm, or --model / --command for other engines.`);
@@ -393,6 +506,6 @@ export async function speak(script, out, opts = {}) {
   }
   // The whole file is transcribed back once: a problem is reported, since these engines speak the script in one go.
   const c = await heardCheck(out, spoken(script), opts.language);
-  return { ...result, checks: [{ at: 0, text: spoken(script), ok: c.ok, heard: c.heard, why: c.why }], problems: c.ok ? [] : [`${c.why}. Heard: "${c.heard}".`] };
+  return { ...result, checks: [{ at: 0, text: spoken(script), ok: c.ok, heard: c.heard, why: c.why, doubt: c.doubt ?? [] }], problems: c.ok ? [] : [`${c.why}. Heard: "${c.heard}".`] };
 }
 
