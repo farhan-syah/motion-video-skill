@@ -4,6 +4,12 @@ What each version adds. `node scripts/video.mjs version` prints the installed on
 
 ## [Unreleased]
 
+- `speak --model` runs Hugging Face TTS models without ONNX weights in Python on the CPU, such as MMS-TTS in 1,100+ languages.
+- `speak --command` speaks phrase by phrase, so pauses and timed scripts work. `--one-call` keeps the single call.
+- `references/tts.md`: engines by language and machine, and how to add a voice or model.
+- `doctor` names the CPU voices for other languages and their license.
+- Fixed: `speak` no longer overwrites a source script that sits at its output path.
+
 ## [1.0.0]
 
 First release.

@@ -48,6 +48,7 @@ Tool: `node <skill-dir>/scripts/video.mjs <command>`, run from the project direc
 | Choosing or executing a visual style                                                                                           | `references/styles.md`           |
 | Writing scenes, the kit (icons, atmospheres, UI parts, leader lines), 3D, footage and libraries, the seek contract, the camera | `references/building.md`         |
 | Voiceover, text to speech, word timing, captions                                                                               | `references/narration.md`        |
+| Choosing a TTS engine for a language or machine, adding a voice or model                                                       | `references/tts.md`              |
 | Finding an icon name                                                                                                           | `references/icons.txt` (grep it) |
 | Thresholds, and the visual review of sheets                                                                                    | `references/craft.md`            |
 | Commands, flags, `video.json` fields, setup errors                                                                             | `references/cli.md`              |

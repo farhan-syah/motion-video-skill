@@ -17,7 +17,7 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
 | Subtitles (`.srt`, `.vtt`) with a recording                         | The file as `voiceover.script`: its words go on screen, its times hold each line in place.                                                                                   |
 | Their own voice, to clone                                           | `--reference their-voice.wav` (VoxCPM2), or their cloning TTS through `--command`. Only their voice, or one they have consent for.                                           |
 | Their own TTS or a paid service                                     | `--command` with its CLI, or `"tts": { "command": … }` in the config.                                                                                                        |
-| A language, accent or voice in mind                                 | An engine that speaks it (below). Never narrate a language the voice cannot speak. With none, ask for their TTS or a recording.                                              |
+| A language, accent or voice in mind                                 | An engine that speaks it (`references/tts.md`). Never narrate a language the voice cannot speak. With none, ask for their TTS or a recording.                                |
 | Only a topic, with narration asked for                              | Write the script from the gathered facts, then `speak` it.                                                                                                                   |
 | Nothing about voice                                                 | No narration unless the video needs it. On-screen text carries the copy. Ask when it matters (SKILL.md, step 3).                                                             |
 
@@ -33,14 +33,9 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
 
 ## Text to speech
 
-`speak script.txt` writes `assets/voiceover.wav`, and `assets/voiceover.txt` beside it without the pause marks (for captions and `transcribe`). Then set `"voiceover": { "file": "assets/voiceover.wav", "script": "assets/voiceover.txt" }`.
+`speak script.txt` writes `assets/voiceover.wav`, and `assets/voiceover.txt` beside it without the pause marks (for captions and `transcribe`). A source script at that path keeps its marks: the spoken words then go to `voiceover.spoken.txt`. Set `"voiceover": { "file": …, "script": … }` as `speak` prints it.
 
-| Engine                        | How                                                                                                 | Fits                                                                                               |
-| ----------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Kokoro (default)              | `speak script.txt [--voice af_heart] [--speed 1]`                                                   | English, local, no setup. American `af_*`, `am_*`. British `bf_*`, `bm_*`.                         |
-| VoxCPM2                       | `speak script.txt --engine voxcpm [--voice "(A warm, calm male narrator)"] [--reference voice.wav]` | 30 languages including Malay, described or cloned voices. Needs an NVIDIA GPU with 8 GB, and `uv`. |
-| Any transformers.js TTS model | `speak script.txt --model Xenova/mms-tts-eng`                                                       | A Hugging Face model with ONNX weights, run locally                                                |
-| Any TTS the user runs         | `speak script.txt --command "piper --model voice.onnx --output_file {out} < {text_file}"`           | Other languages, cloned or premium voices, cloud services                                          |
+- **Engine:** Kokoro (English, CPU) by default. `--engine voxcpm` (30 languages, NVIDIA GPU), `--model <Hugging Face id>` (any language a model speaks, CPU) or `--command` (any TTS). Choosing one, languages, hardware and adding a new voice: `references/tts.md`.
 
 ### Pauses
 
@@ -51,17 +46,7 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
 | Sentence end inside a line | 0.3 s                          |
 | `[pause]` / `[pause 1.2]`  | 0.6 s / exactly 1.2 s          |
 
-Kokoro, VoxCPM2 and `--model` speak each phrase alone and join them with these pauses. A `--command` engine gets the whole script as one text, without the marks.
-
-### Engines and models
-
-- **Command placeholders:** `{text}` (the script, shell-quoted), `{text_file}`, `{voice}`, `{reference}` (a recording to clone).
-- **`{out}`:** the audio the command writes, any format ffmpeg reads. It becomes 48 kHz mono WAV.
-- **VoxCPM2 `--voice`:** write it in English, naming pitch (baritone, deep) and accent. Malay-language descriptions came out higher and less clear. Try a few descriptions and seeds on one line, and keep the one that reads back best.
-- **VoxCPM2 accent:** a described voice drifts toward the model's most common accent. For a sure accent, clone a native speaker with `--reference`, with their consent. Later phrases clone the first, so one voice holds.
-- **VoxCPM2 model:** loads offline from `"tts": { "checkpoint": "/path" }`, the model folder, or the Hugging Face cache. With none, the first run downloads about 4.7 GB. `doctor` names the checkpoint it finds.
-- **Quantized model (GGUF):** its runner goes in `--command`, in the shape `"<runner> --gguf /models/voxcpm2-q6_k.gguf --text {text} --ref {reference} --out {out}"`, with that runner's flags.
-- **Defaults:** set once in `~/.config/motion-video/config.json`: `{ "tts": { "engine": "voxcpm", "voice": "(…)" } }`, `{ "tts": { "command": "…" } }`, or `{ "tts": { "model": "…", "voice": "…" } }`. Flags override it.
+Every engine speaks each phrase alone and joins them with these pauses. `--command … --one-call` gets the whole script as one text, without the marks.
 
 ### Writing for a generated voice
 

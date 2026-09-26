@@ -61,7 +61,16 @@ Output: `out/video.mp4` (master) and `out/video-compressed.mp4`, about a quarter
 
 **Sound:** music only when you supply it. Otherwise each motion gets a synthesized sound effect.
 
-**Voiceover:** your recording, a TTS file, subtitles or a script (plain or timed per line), used as given. English speech runs locally out of the box. VoxCPM2 speaks 30 languages on an NVIDIA GPU with 8 GB. Any TTS you already use plugs in. A local Whisper model times every word, so captions and scenes follow the speech.
+**Voiceover:** your recording, a TTS file, subtitles or a script (plain or timed per line), used as given. A local Whisper model times every word, so captions and scenes follow the speech. For a script without a recording, the agent picks a local text-to-speech engine that fits your language and machine:
+
+| Engine                  | Languages                                               | Machine                          |
+| ----------------------- | ------------------------------------------------------- | -------------------------------- |
+| Kokoro (default)        | English                                                 | Any, CPU only included           |
+| VoxCPM2                 | 30, with described or cloned voices                     | NVIDIA GPU with 8 GB, and `uv`   |
+| Any Hugging Face model  | The model's, such as MMS-TTS in 1,100+ (non-commercial) | Any, CPU only included, and `uv` |
+| Any TTS you already use | The tool's                                              | Wherever it runs                 |
+
+`node scripts/video.mjs doctor` shows which of these your machine runs. Languages, hardware and adding your own voice or model: `references/tts.md`.
 
 ## CLI
 
@@ -69,14 +78,14 @@ The agent runs `node scripts/video.mjs <command>` from the project folder. You c
 
 ## Repository layout
 
-| Path           | Contents                                                                                         |
-| -------------- | ------------------------------------------------------------------------------------------------ |
-| `SKILL.md`     | The workflow the agent follows                                                                   |
-| `CHANGELOG.md` | What each version adds                                                                           |
-| `references/`  | Direction, concepts, building, craft thresholds, styles, CLI, icon index                         |
-| `templates/`   | What `init` copies into a project: CSS kit, runtime, fonts, icons, scene and direction templates |
-| `scripts/`     | The CLI, renderer, linter, sound synthesis and audit                                             |
-| `scripts/dev/` | Tools for editing the sound catalog                                                              |
+| Path           | Contents                                                                                            |
+| -------------- | --------------------------------------------------------------------------------------------------- |
+| `SKILL.md`     | The workflow the agent follows                                                                      |
+| `CHANGELOG.md` | What each version adds                                                                              |
+| `references/`  | Direction, concepts, building, craft thresholds, styles, narration, text to speech, CLI, icon index |
+| `templates/`   | What `init` copies into a project: CSS kit, runtime, fonts, icons, scene and direction templates    |
+| `scripts/`     | The CLI, renderer, linter, sound synthesis and audit                                                |
+| `scripts/dev/` | Tools for editing the sound catalog                                                                 |
 
 ## Development
 
@@ -106,5 +115,6 @@ MIT. See `LICENSE`.
 - transformers.js (Apache 2.0) and ONNX Runtime (MIT)
 - Kokoro-82M (Apache 2.0) and Whisper (MIT) models
 - VoxCPM2 (Apache 2.0), only with `speak --engine voxcpm`: its Python environment through `uv`, and the model unless already on disk
+- A Hugging Face model named with `speak --model`, under its own license (MMS-TTS: CC-BY-NC 4.0). A model without ONNX weights also installs a Python environment through `uv`.
 
 Fonts fetched with `font` keep their own licenses, copied next to each font.

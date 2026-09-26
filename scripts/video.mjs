@@ -32,10 +32,11 @@ Commands:
                                  Default size: the manifest's. --countries lists every country name.
   speak TEXT|FILE [--engine kokoro|voxcpm] [--voice V] [--reference WAV] [--speed S] [--seed N] [--reroll 3,7]
         [--language L]
-        [--model HF_ID | --command "TEMPLATE"] [--out WAV]
+        [--model HF_ID | --command "TEMPLATE" [--one-call]] [--out WAV]
                                  Narration from a script. Writes the WAV and its script next to it (default
                                  assets/voiceover.wav and .txt). Engine: --command runs any TTS with {text},
-                                 {text_file}, {out}, {voice} and {reference}; --engine voxcpm runs VoxCPM2 (30 languages, voice
+                                 {text_file}, {out}, {voice} and {reference}, once per phrase (--one-call: once for
+                                 the whole script, pause marks dropped); --engine voxcpm runs VoxCPM2 (30 languages, voice
                                  design with --voice "(description)", cloning with --reference; NVIDIA GPU, 8 GB);
                                  --model runs a transformers.js TTS model; the default is Kokoro (local, English).
                                  "tts" in ~/.config/motion-video/config.json sets defaults. Every take is heard
@@ -100,6 +101,7 @@ function parseArgs(argv) {
     else if (a === '--reroll') opts.reroll = argv[++i].split(',').map((v) => Number(v.trim()));
     else if (a === '--out') opts.out = argv[++i];
     else if (a === '--command') opts.command = argv[++i];
+    else if (a === '--one-call') opts.oneCall = true;
     else if (a === '--engine') opts.engine = argv[++i];
     else if (a === '--reference') opts.reference = argv[++i];
     else if (a === '--device') opts.device = argv[++i];
@@ -301,6 +303,7 @@ async function speakCmd(opts) {
     voice: opts.voice ?? undefined, speed: opts.speed ?? undefined, model: opts.model ?? undefined, command: opts.command ?? undefined,
     engine: opts.engine ?? undefined, reference: opts.reference ? resolve(opts.reference) : undefined, device: opts.device ?? undefined,
     seed: opts.seed ?? undefined, language: opts.language ?? undefined, cues: cues ?? undefined, reroll: opts.reroll ?? undefined,
+    oneCall: opts.oneCall ?? undefined,
   });
   // Pace: an explainer reads best around 4.5-5.5 syllables a second while speaking. Faster tires the listener.
   const { pace } = await import('./lib/speak.mjs');
@@ -313,8 +316,10 @@ async function speakCmd(opts) {
     console.log(`Timed script: ${cues.length} lines placed at their times.`);
     for (const t of timing) console.log(`  ${t}`);
   }
-  const txt = out.replace(/\.[^./]+$/, '.txt');
   // Captions and transcribe read the words as spoken: the pause marks stay only in the source script.
+  // A source script at that same path keeps its marks and time stamps: the spoken words go beside it instead.
+  const plain = out.replace(/\.[^./]+$/, '.txt');
+  const txt = existsSync(arg) && resolve(arg) === plain ? plain.replace(/\.txt$/, '.spoken.txt') : plain;
   const { spoken } = await import('./lib/speak.mjs');
   writeFileSync(txt, `${spoken(script)}\n`);
   // Where each phrase sits in the audio: transcribe keeps every word inside its own phrase.
@@ -326,7 +331,7 @@ async function speakCmd(opts) {
 Next: set "voiceover": { "file": "${rel(out)}", "script": "${rel(txt)}" } in video.json, then run transcribe.`);
   // Every phrase as it was heard back, so a wrong word shows even when the check passes it.
   console.log('\nHeard back, phrase by phrase:');
-  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.doubt?.length ? `\n        both recognizers heard ${c.doubt.map((w) => `"${w}"`).join(', ')} differently: listen to it, and --reroll this phrase if it is said wrong` : ''}`);
+  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.doubt?.length ? `\n        both recognizers heard ${c.doubt.map((w) => `"${w}"`).join(', ')} differently: listen to it, and ${/^VoxCPM2/.test(engine) ? '--reroll this phrase' : 'reword the phrase'} if it is said wrong` : ''}`);
   if (problems.length) {
     console.log(`\nThe speech check found ${problems.length} problem(s), heard back with Whisper:`);
     for (const p of problems) console.log(`  ${p}`);

@@ -1,7 +1,8 @@
 // Text to speech for narration, from one of four engines:
 //   command: any TTS the user already runs (Piper, XTTS, F5, a cloud CLI), through a command template.
 //   voxcpm:  VoxCPM2 (OpenBMB, Apache 2.0): 30 languages, voice design and cloning. Needs an NVIDIA GPU with 8 GB.
-//   model:   any text-to-speech model transformers.js runs locally (a Hugging Face ONNX model id).
+//   model:   any Hugging Face text-to-speech model, run locally: transformers.js for ONNX weights, else the
+//            transformers pipeline in Python on the CPU (MMS-TTS speaks 1,100+ languages this way).
 //   default: Kokoro-82M (Apache 2.0) through kokoro-js: local, English voices, no setup.
 // Flags choose, else "tts" in ~/.config/motion-video/config.json.
 import { spawnSync } from 'node:child_process';
@@ -51,6 +52,13 @@ function wav(parts, rate) {
     }
   }
   return { buf, duration: n / rate };
+}
+
+// Any audio file ffmpeg reads, as 48 kHz mono samples. Null when ffmpeg cannot read it.
+const RATE = 48000;
+function decode(file) {
+  const c = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', file, '-ac', '1', '-ar', String(RATE), '-f', 'f32le', '-'], { maxBuffer: 1 << 30 });
+  return c.status === 0 && c.stdout.length ? new Float32Array(Uint8Array.from(c.stdout).buffer) : null;
 }
 
 // Sentences, so long scripts stay within a model's input length and get a natural pause between sentences.
@@ -108,9 +116,13 @@ async function kokoro(script, { model = KOKORO, voice = DEFAULT_VOICE, speed = 1
 
 async function transformersModel(script, { model }) {
   const { pipeline } = await speechModule();
-  const tts = await pipeline('text-to-speech', model, { dtype: 'fp32' }).catch((e) => {
-    throw new Error(`speak: cannot load "${model}" as a transformers.js text-to-speech model (${e.message.split('\n')[0]}). It needs ONNX weights on the Hugging Face hub, for example Xenova/mms-tts-eng. For other engines, use --command.`);
-  });
+  let tts;
+  try {
+    tts = await pipeline('text-to-speech', model, { dtype: 'fp32' });
+  } catch (e) {
+    // Most Hugging Face TTS models ship PyTorch weights only (MMS-TTS in 1,100+ languages among them): Python runs them.
+    return pythonModel(script, { model, why: e.message.split('\n')[0] });
+  }
   const parts = [];
   let rate = 16000;
   const list = phrases(script);
@@ -122,23 +134,64 @@ async function transformersModel(script, { model }) {
   return { ...wav(parts, rate), phrases: spans(list, parts, rate) };
 }
 
-// Runs the user's TTS command. Placeholders: {text} (the script, shell-quoted), {text_file} (a file holding it),
-// {out} (the audio file the command must write, any format ffmpeg reads), {voice} and {reference} (a recording to clone).
-function command(script, { command: template, voice = '', reference = '' }, out) {
+// A Hugging Face TTS model without ONNX weights, through the transformers pipeline in Python (scripts/tts/hf_speak.py)
+// on the CPU. uv builds its environment on first use. The model loads once for every phrase.
+function pythonModel(script, { model, why }) {
+  if (spawnSync('uv', ['--version'], { stdio: 'ignore' }).status !== 0) {
+    throw new Error(`speak: "${model}" has no ONNX weights transformers.js can load (${why}). Install uv (https://docs.astral.sh/uv) to run it in Python, or use --command.`);
+  }
+  const list = phrases(script);
+  if (!list.length) throw new Error('speak: the script is empty.');
   const dir = mkdtempSync(join(tmpdir(), 'motion-video-tts-'));
   try {
+    const listFile = join(dir, 'sentences.json');
+    writeFileSync(listFile, JSON.stringify(list.map((p, index) => ({ index, text: p.text, seed: 7 }))));
+    const runner = fileURLToPath(new URL('../tts/hf_speak.py', import.meta.url));
+    console.error(`speak: running ${model} in Python on the CPU. The first run builds its environment and downloads the model.`);
+    const env = { ...process.env, HF_HUB_CACHE: process.env.HF_HUB_CACHE ?? modelsDir(), TQDM_DISABLE: '1', PYTHONWARNINGS: 'ignore', TRANSFORMERS_VERBOSITY: 'error' };
+    const r = spawnSync('uv', ['run', '--quiet', runner, '--sentences', listFile, '--dir', dir, '--model', model], { stdio: ['ignore', 'pipe', 'pipe'], env, encoding: 'utf8', maxBuffer: 1 << 28 });
+    if (r.status !== 0) throw new Error(`speak: "${model}" loads neither in transformers.js (${why}) nor in Python:\n${`${r.stdout}\n${r.stderr}`.trim().split('\n').slice(-15).join('\n')}\nUse a model whose pipeline tag is text-to-speech, or --command.`);
+    const parts = [];
+    list.forEach((p, i) => {
+      const audio = decode(join(dir, `seg-${String(i).padStart(3, '0')}.wav`));
+      if (!audio) throw new Error(`speak: ${model} wrote no audio for "${p.text}".`);
+      parts.push(audio, new Float32Array(Math.round(p.pause * RATE)));
+    });
+    return { ...wav(parts, RATE), phrases: spans(list, parts, RATE) };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// Runs the user's TTS command. Placeholders: {text} (the text, shell-quoted), {text_file} (a file holding it),
+// {out} (the audio file the command must write, any format ffmpeg reads), {voice} and {reference} (a recording to clone).
+// It runs once per phrase, so the script's pauses, timed lines and phrase spans hold as with the built-in engines.
+// oneCall runs it once on the whole script without the pause marks: for an engine that loads slowly on every call.
+export function command(script, { command: template, voice = '', reference = '', oneCall = false }) {
+  const dir = mkdtempSync(join(tmpdir(), 'motion-video-tts-'));
+  const quote = (t) => (process.platform === 'win32' ? `"${t.replace(/"/g, '\\"')}"` : `'${t.replace(/'/g, `'\\''`)}'`);
+  const run = (text) => {
     const textFile = join(dir, 'script.txt');
     const raw = join(dir, 'speech.wav');
-    writeFileSync(textFile, `${script}\n`);
-    const quote = (t) => (process.platform === 'win32' ? `"${t.replace(/"/g, '\\"')}"` : `'${t.replace(/'/g, `'\\''`)}'`);
-    const cmd = template.replaceAll('{text_file}', quote(textFile)).replaceAll('{out}', quote(raw)).replaceAll('{voice}', quote(voice)).replaceAll('{reference}', quote(reference)).replaceAll('{text}', quote(script));
+    rmSync(raw, { force: true });
+    writeFileSync(textFile, `${text}\n`);
+    const cmd = template.replaceAll('{text_file}', quote(textFile)).replaceAll('{out}', quote(raw)).replaceAll('{voice}', quote(voice)).replaceAll('{reference}', quote(reference)).replaceAll('{text}', quote(text));
     const r = spawnSync(cmd, { shell: true, stdio: ['ignore', 'inherit', 'inherit'] });
-    if (r.status !== 0) throw new Error(`speak: the TTS command exited ${r.status}: ${template}`);
-    // Whatever the command wrote (wav, mp3, flac), the narration is 48 kHz mono 16-bit PCM.
-    const c = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', raw, '-ac', '1', '-ar', '48000', '-c:a', 'pcm_s16le', out]);
-    if (c.status !== 0) throw new Error(`speak: the TTS command wrote no audio ffmpeg can read at {out}. Check that the command writes its output to the {out} path.`);
-    const p = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', out], { encoding: 'utf8' });
-    return { duration: Number(p.stdout) };
+    if (r.status !== 0) throw new Error(`speak: the TTS command exited ${r.status} on "${text}": ${template}`);
+    // Whatever the command wrote (wav, mp3, flac), the narration is 48 kHz mono.
+    const audio = decode(raw);
+    if (!audio) throw new Error(`speak: the TTS command wrote no audio ffmpeg can read at {out}. Check that the command writes its output to the {out} path.`);
+    return audio;
+  };
+  try {
+    if (oneCall) return wav([run(spoken(script))], RATE);
+    const list = phrases(script);
+    const parts = [];
+    list.forEach((p, i) => {
+      parts.push(run(p.text), new Float32Array(Math.round(p.pause * RATE)));
+      if (list.length > 1) console.error(`tts command: ${i + 1}/${list.length} phrases`);
+    });
+    return { ...wav(parts, RATE), phrases: spans(list, parts, RATE) };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -482,7 +535,7 @@ export async function speak(script, out, opts = {}) {
   }
   if (opts.cues) {
     const r = await speak(opts.cues.map((c) => c.text).join('\n'), out, { ...opts, cues: null });
-    if (!r.phrases) return { ...r, problems: [...(r.problems ?? []), 'This engine speaks the script in one piece, so its lines cannot be placed at their times. Use Kokoro, VoxCPM2 or --model for a timed script.'] };
+    if (!r.phrases) return { ...r, problems: [...(r.problems ?? []), 'This engine speaks the script in one piece, so its lines cannot be placed at their times. Run the command without --one-call, or use Kokoro, VoxCPM2 or --model.'] };
     const p = placeOnTimes(out, r.phrases, opts.cues);
     return { ...r, duration: p.duration, phrases: p.phrases, timing: p.late };
   }
@@ -498,13 +551,16 @@ export async function speak(script, out, opts = {}) {
   const model = opts.model ?? tts.model ?? KOKORO;
   const voice = opts.voice ?? tts.voice ?? DEFAULT_VOICE;
   let result;
-  if (cmd) result = { ...command(spoken(script), { command: cmd, voice: opts.voice ?? tts.voice ?? '', reference: opts.reference ?? tts.reference ?? '' }, out), engine: `command: ${cmd}` };
-  else {
+  if (cmd) {
+    const r = command(script, { command: cmd, voice: opts.voice ?? tts.voice ?? '', reference: opts.reference ?? tts.reference ?? '', oneCall: opts.oneCall ?? tts.oneCall ?? false });
+    writeFileSync(out, r.buf);
+    result = { duration: r.duration, phrases: r.phrases, engine: `command: ${cmd}` };
+  } else {
     const r = /kokoro/i.test(model) ? await kokoro(script, { model, voice, speed }) : await transformersModel(script, { model });
     writeFileSync(out, r.buf);
     result = { duration: r.duration, phrases: r.phrases, engine: /kokoro/i.test(model) ? `Kokoro (${voice})` : model };
   }
-  // The whole file is transcribed back once: a problem is reported, since these engines speak the script in one go.
+  // The whole file is transcribed back once: a problem is reported, since these engines keep no per-phrase takes.
   const c = await heardCheck(out, spoken(script), opts.language);
   return { ...result, checks: [{ at: 0, text: spoken(script), ok: c.ok, heard: c.heard, why: c.why, doubt: c.doubt ?? [] }], problems: c.ok ? [] : [`${c.why}. Heard: "${c.heard}".`] };
 }

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { PAUSES, phrases, spoken } from './speak.mjs';
+import { command, PAUSES, phrases, spoken } from './speak.mjs';
 
 test('a script paces itself: breaths at line breaks, beats at blank lines, exact [pause] marks', () => {
   const script = 'Tahu tak?\nKL ni maksudnya kuala berlumpur. [pause] Betul.\n\nIt runs 13.5 km. [pause 1.2]\nEnd.';
@@ -38,4 +38,16 @@ test('a clean take passes, and a click, a thump or a cut-off end is caught', asy
   assert.match(tidy(thumped).faults.join(), /thump before the speech/);
   const cut = voice(1.2).subarray(0, 48000);
   assert.match(tidy(cut).faults.join(), /cut off/);
+});
+
+test('a TTS command speaks each phrase, joined with the script pauses', () => {
+  // A stand-in TTS: a tone whose length follows the text, written to {out} as MP3.
+  const tone = 'ffmpeg -loglevel error -f lavfi -i "sine=d=$(( $(wc -c < {text_file}) / 10 ))" -y -f mp3 {out}';
+  const r = command('One two three four five six.\n\nSeven eight nine ten eleven twelve.', { command: tone });
+  assert.equal(r.phrases.length, 2);
+  assert.equal(r.phrases[0].start, 0);
+  assert.ok(Math.abs(r.phrases[0].end - 2) < 0.1);
+  assert.ok(Math.abs(r.phrases[1].start - (r.phrases[0].end + PAUSES.beat)) < 0.01);
+  const once = command('One two. [pause 2] Three.', { command: tone, oneCall: true });
+  assert.equal(once.phrases, undefined);
 });

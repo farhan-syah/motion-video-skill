@@ -127,7 +127,8 @@ export async function doctor(root) {
   const { voxcpmCheckpoint, voxcpmReady } = await import('./speak.mjs');
   const vox = voxcpmReady();
   const uv = first('uv', ['--version']);
-  say('uv', uv ?? 'not found: VoxCPM2 needs it to build its Python environment (https://docs.astral.sh/uv)');
+  say('uv', uv ?? 'not found: VoxCPM2 and PyTorch-only --model voices need it to build their Python environment (https://docs.astral.sh/uv)');
+  say('cpu voices', uv ? '--model facebook/mms-tts-<iso> speaks 1,100+ languages on the CPU, non-commercial use only (first run builds a 1.1 GB Python environment)' : 'English only (Kokoro). Install uv for --model voices in other languages');
   let ckpt;
   try {
     ckpt = voxcpmCheckpoint();
@@ -137,8 +138,12 @@ export async function doctor(root) {
   }
   say('voxcpm2', vox.ok ? `available (${vox.why}): 30 languages, voice design and cloning. ${ckpt}` : `not available: ${vox.why}`);
   const engine = cfg.tts?.engine ? cfg.tts.engine : cfg.tts?.command ? `command: ${cfg.tts.command}` : cfg.tts?.model ? `model: ${cfg.tts.model}` : null;
-  say('tts default', engine ? `${engine} (from the config)` : `Kokoro, English only.${vox.ok ? ' For any other language, pass --engine voxcpm (available here).' : ''} "tts" in the config changes the default.`);
-  if (!vox.ok && !cfg.tts?.command && !cfg.tts?.model) limits.push(`narration in a language other than English: no engine here (VoxCPM2 ${vox.why}). Ask for the user's TTS (speak --command) or a recording.`);
+  say('tts default', engine ? `${engine} (from the config)` : `Kokoro, English only. Other languages: ${vox.ok ? '--engine voxcpm (available here)' : uv ? '--model facebook/mms-tts-<iso>' : 'the user\'s TTS (--command) or a recording'}. "tts" in the config changes the default (references/tts.md).`);
+  if (!vox.ok && !cfg.tts?.command && !cfg.tts?.model) {
+    limits.push(uv
+      ? `narration in a language other than English: only MMS-TTS on the CPU (--model facebook/mms-tts-<iso>), one plain voice per language, non-commercial use only. VoxCPM2 ${vox.why}. A recording or the user's TTS (speak --command) sounds better.`
+      : `narration in a language other than English: no engine here (VoxCPM2 ${vox.why}, and no uv for --model voices). Ask for the user's TTS (speak --command) or a recording.`);
+  }
   const modelFree = freeSpace(existsSync(models) ? models : cacheRoot());
   if (vox.ok && ckpt.startsWith('no checkpoint') && modelFree != null && modelFree < 8 * 1024 ** 3) limits.push(`VoxCPM2's first run downloads about 4.7 GB, and the model folder's disk has ${gb(modelFree)} free.`);
 
