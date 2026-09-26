@@ -31,3 +31,10 @@ test('halves and decimals read as their values', () => {
   assert.deepEqual(spokenNumbers('tiga perpuluhan lima kilometer'), [3.5]);
   assert.deepEqual(spokenNumbers('three and a half litres, or three point five'), [3.5, 3.5]);
 });
+
+test('a teen or tens before hundred multiplies it', () => {
+  assert.deepEqual(spokenNumbers('more than eleven hundred languages'), [1100]);
+  assert.deepEqual(spokenNumbers('twenty-five hundred people'), [2500]);
+  assert.deepEqual(spokenNumbers('nineteen hundred and five'), [1905]);
+  assert.deepEqual(spokenNumbers('eleven hundred fifty'), [1150]);
+});

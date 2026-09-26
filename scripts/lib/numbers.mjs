@@ -94,6 +94,8 @@ function readNumber(t, i) {
       k++;
       read = true;
       if (t[k] in UNITS) group += UNITS[t[k++]];
+      // "twenty-five hundred" is 2500.
+      if (t[k] === 'hundred' && group < 100) continue;
       break;
     }
     if (w in TEENS) {
@@ -101,6 +103,8 @@ function readNumber(t, i) {
       group += TEENS[w];
       k++;
       read = true;
+      // "eleven hundred" is 1100, "nineteen hundred and five" 1905.
+      if (t[k] === 'hundred' && group < 100) continue;
       break;
     }
     if (w in UNITS) {
