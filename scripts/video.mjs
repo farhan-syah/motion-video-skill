@@ -31,7 +31,7 @@ Commands:
                                  --land replaces the outlines with precise polygons, --layer draws lines and areas.
                                  Default size: the manifest's. --countries lists every country name.
   speak TEXT|FILE [--engine kokoro|voxcpm] [--voice V] [--style S] [--reference WAV] [--speed S] [--pace P] [--seed N]
-        [--reroll 3,7] [--cfg 1.6] [--steps 16] [--review]
+        [--reroll 3,7] [--cfg 1.6] [--steps 16] [--hifi] [--review] [--raw]
         [--language L]
         [--model HF_ID | --command "TEMPLATE" [--one-call]] [--out WAV]
                                  Narration from a script. Writes the WAV and its script next to it (default
@@ -111,6 +111,8 @@ function parseArgs(argv) {
     else if (a === '--command') opts.command = argv[++i];
     else if (a === '--one-call') opts.oneCall = true;
     else if (a === '--review') opts.review = true;
+    else if (a === '--raw') opts.raw = true;
+    else if (a === '--hifi') opts.hifi = true;
     else if (a === '--engine') opts.engine = argv[++i];
     else if (a === '--reference') opts.reference = argv[++i];
     else if (a === '--device') opts.device = argv[++i];
@@ -307,8 +309,12 @@ async function speakCmd(opts) {
   const cues = parseTimedScript(raw);
   const script = cues ? cues.map((c) => c.text).join('\n') : raw;
   // The script read as a voice will read it, before any audio. --review stops here.
-  const { review } = await import('./lib/speak.mjs');
-  const notes = review(script, { language: opts.language ?? undefined });
+  const { review, defaultEngine } = await import('./lib/speak.mjs');
+  const { config: cfg } = await import('./lib/paths.mjs');
+  // The engine speak will use: questions need their own delivery note only where notes are voiced (VoxCPM2).
+  const tts = cfg().tts ?? {};
+  const engineFor = opts.engine ?? (opts.command || opts.model ? null : tts.engine ?? (tts.command || tts.model ? null : defaultEngine({ voice: opts.voice ?? undefined, reference: opts.reference ?? undefined, language: opts.language ?? undefined })));
+  const notes = review(script, { language: opts.language ?? undefined, notes: engineFor === 'voxcpm' });
   if (notes.length || opts.review) {
     console.log(notes.length ? `Script review, ${notes.length} note(s) (narration.md, Prepare the script for speech):` : 'Script review: nothing likely to be misread.');
     for (const r of notes) console.log(`  line ${r.line}  "${r.text}": ${r.note}`);
@@ -317,22 +323,27 @@ async function speakCmd(opts) {
   if (opts.review) return 0;
   const out = resolve(opts.out ?? 'assets/voiceover.wav');
   mkdirSync(dirname(out), { recursive: true });
-  const { duration, engine, problems = [], phrases, checks = [], timing = [] } = await speak(script, out, {
+  const { duration, engine, problems = [], phrases: made, checks = [], timing = [] } = await speak(script, out, {
     voice: opts.voice ?? undefined, speed: opts.speed ?? undefined, model: opts.model ?? undefined, command: opts.command ?? undefined,
     engine: opts.engine ?? undefined, reference: opts.reference ? resolve(opts.reference) : undefined, device: opts.device ?? undefined,
     seed: opts.seed ?? undefined, language: opts.language ?? undefined, cues: cues ?? undefined, reroll: opts.reroll ?? undefined,
-    oneCall: opts.oneCall ?? undefined, style: opts.style ?? undefined, cfg: opts.cfg ?? undefined, steps: opts.steps ?? undefined,
+    oneCall: opts.oneCall ?? undefined, style: opts.style ?? undefined, cfg: opts.cfg ?? undefined, steps: opts.steps ?? undefined, hifi: opts.hifi ?? undefined,
   });
   // Pace: a relaxed explainer sits near 4.1 syllables a second while speaking (3.5 to 4.7). Faster tires the
   // listener. --pace or "tts.pace" sets another target, with the range 0.6 either side of it.
   const { pace } = await import('./lib/speak.mjs');
   const { config } = await import('./lib/paths.mjs');
   const target = opts.pace ?? config().tts?.pace ?? 4.1;
-  // Generated speech often makes its "s" louder than its vowels, which sounds harsh: every engine's output is de-essed.
-  // A user's own recording never passes through here.
-  const { deEssFile } = await import('./lib/speak.mjs');
-  const ess = deEssFile(out);
-  console.log(ess.share > 0 ? `De-essed: harsh "s" sounds turned down in ${(ess.share * 100).toFixed(1)}% of the audio, by up to ${(-ess.deepest).toFixed(1)} dB.` : 'De-essed: no harsh "s" sounds found.');
+  // The voice layer's own processing: pace and loudness evened sentence by sentence, then de-essing. A user's own
+  // recording never passes through here. --raw leaves the generated voice as it came.
+  let phrases = made;
+  if (!opts.raw) {
+    const { polish } = await import('./lib/speak.mjs');
+    const done = polish(out, phrases ?? [], { pace: !cues });
+    if (phrases) phrases = done.phrases;
+    const s = done.stats;
+    console.log(`Voice polish: pace evened in ${s.paced} sentence(s)${s.paced ? ` (up to ${Math.round(s.maxStretch * 100)}%)` : ''}, loudness in ${s.leveled}${s.leveled ? ` (up to ${s.maxGain.toFixed(1)} dB)` : ''}, harsh "s" turned down in ${(s.essShare * 100).toFixed(1)}% of the audio${s.essShare ? ` (up to ${(-s.essDeepest).toFixed(1)} dB)` : ''}. --raw skips this.`);
+  }
   // The verdict judges the value as printed, so a pace on the range's edge never reads as outside it.
   const rate = phrases ? Math.round(pace(phrases, out) * 10) / 10 : null;
   // The suggestion aims at the target and scales the speed this take was made with.
@@ -362,7 +373,7 @@ or "audio": "${rel(out)}" and "script": "${rel(txt)}" on the one scene it narrat
   // Every phrase as it was heard back, so a wrong word shows even when the check passes it.
   console.log('\nHeard back, phrase by phrase:');
   const { HEATED } = await import('./lib/speak.mjs');
-  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length || c.heat > HEATED || c.pauses?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.heat > HEATED ? `\n        its pitch peaks at ${c.heat}x the voice's usual pitch: it may sound shouted or excited. Listen, then calm its delivery note or --reroll it` : ''}${(c.pauses ?? []).map((p) => `\n        a ${p.gap}s pause between "${p.after}" and "${p.before}", where the script has no break: the voice may have misread the grammar. Add a comma where the break belongs, or reword`).join('')}${c.doubt?.length ? `\n        both recognizers missed or misheard ${c.doubt.map((w) => `"${w}"`).join(', ')}: listen to it, and ${/^VoxCPM2/.test(engine) ? '--reroll this phrase' : 'reword the phrase'} if it is said wrong` : ''}`);
+  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length || c.heat > HEATED || c.pauses?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.heat > HEATED ? `\n        ${c.hotText ? `"${c.hotText.slice(0, 60)}": ` : ''}its pitch peaks at ${c.heat}x the voice's usual pitch: it may sound shouted or excited. Listen, then calm its delivery note or --reroll it` : ''}${(c.pauses ?? []).map((p) => `\n        a ${p.gap}s pause between "${p.after}" and "${p.before}", where the script has no break: the voice may have misread the grammar. Add a comma where the break belongs, or reword`).join('')}${c.doubt?.length ? `\n        both recognizers missed or misheard ${c.doubt.map((w) => `"${w}"`).join(', ')}: listen to it, and ${/^VoxCPM2/.test(engine) ? '--reroll this phrase' : 'reword the phrase'} if it is said wrong` : ''}`);
   if (problems.length) {
     console.log(`\nThe speech check found ${problems.length} problem(s), heard back with Whisper:`);
     for (const p of problems) console.log(`  ${p}`);
@@ -737,7 +748,9 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs }, op
   }
   const fxStem = output === m.output && voice.length && sfx.length ? join(m.outDir, 'voice', 'effects.wav') : null;
   if (fxStem) mkdirSync(dirname(fxStem), { recursive: true });
-  const level = await muxAudio(joined, output, { voice, sfx, music: whole ? m.music : null, direction, bed, fxStem }, total);
+  // A whole-video render also writes each layer alone (voice, music, effects), to check and listen to apart.
+  const stems = output === m.output ? join(m.outDir, 'stems') : null;
+  const level = await muxAudio(joined, output, { voice, sfx, music: whole ? m.music : null, direction, bed, fxStem, stems }, total);
   if (level) {
     console.log(`loudness ${level.loudness.toFixed(1)} LUFS, true peak ${level.truePeak.toFixed(1)} dBTP (target ${level.target} LUFS, ceiling ${level.ceiling} dBTP)`);
     if (level.held) console.log(`  held ${(level.target - level.loudness).toFixed(1)} LU under the target: reaching it would cut the loudest moment's lead over the rest by more than ${level.leadLoss} dB and flatten the payoff. This is expected for a sparse effects-only mix: the file ships quieter so the payoff keeps its contrast. Raise the quiet cues only if the soft passages sound too faint. Do not lower the payoff to close the gap.`);

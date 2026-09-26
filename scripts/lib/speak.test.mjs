@@ -133,11 +133,16 @@ test('pitch tracking reads a voice, and a pitch swing counts as heat', async () 
   const tone = (hz, seconds) => Float32Array.from({ length: Math.round(seconds * rate) }, (_, i) => 0.3 * Math.sin((2 * Math.PI * hz * i) / rate));
   const p = pitches(tone(150, 1));
   assert.ok(p.length > 10 && Math.abs(medianPitch(tone(150, 1)) - 150) < 5);
-  // A part that climbs from the voice's pitch to twice it is heated. One that stays near it is not.
+  // A part that climbs from the voice's pitch to 1.7 times it is heated. One that stays near it is not. A jump of a
+  // full octave reads as a tracking error, not a swing.
   const climb = new Float32Array(rate);
   climb.set(tone(150, 0.5));
-  climb.set(tone(300, 0.5), rate / 2);
+  climb.set(tone(260, 0.5), rate / 2);
   assert.ok(heat(climb, 150) > 1.6);
+  const octave = new Float32Array(rate);
+  octave.set(tone(150, 0.5));
+  octave.set(tone(300, 0.5), rate / 2);
+  assert.ok(heat(octave, 150) < 1.6);
   assert.ok(heat(tone(160, 1), 150) < 1.2);
 });
 
@@ -162,4 +167,37 @@ test('the script review flags what a voice is likely to misread', async () => {
     [3, 'This sentence keeps going on and…'],
   ]);
   assert.deepEqual(review('Tiga puluh bahasa. Harga 25 ringgit.', { language: 'ms' }).map((r) => r.text), ['25']);
+  // A sentence of 14 words or fewer is left alone. One of 15 with no comma is flagged.
+  assert.equal(review('One two three four five six seven eight nine ten eleven twelve thirteen fourteen.').length, 0);
+  assert.equal(review('One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen.').length, 1);
+});
+
+test('a dash or ellipsis standing alone is a break, not a stray pause', async () => {
+  const { strayPauses } = await import('./speak.mjs');
+  const { alignScript } = await import('./voice.mjs');
+  const at = (list) => list.map(([text, start, end]) => ({ text, start, end }));
+  const heard = at([['She', 0, 0.2], ['passes', 0.2, 0.6], ['it', 0.6, 0.7], ['on', 0.7, 0.9], ['mouth', 1.6, 1.9], ['to', 1.9, 2.0], ['mouth', 2.0, 2.3], ['to', 3.0, 3.1], ['a', 3.1, 3.2], ['bee.', 3.2, 3.5]]);
+  assert.deepEqual(strayPauses(heard, 'She passes it on — mouth to mouth — to a bee.', alignScript), []);
+});
+
+test('a click is repaired in place, and the voice around it is kept', async () => {
+  const { clicks, declick } = await import('./speak.mjs');
+  const rate = 48000;
+  const x = Float32Array.from({ length: rate }, (_, i) => 0.3 * Math.sin((2 * Math.PI * 150 * i) / rate));
+  x[24000] += 0.8;
+  const found = clicks(x);
+  assert.equal(found.length, 1);
+  const y = declick(x, found);
+  assert.deepEqual(clicks(y), []);
+  // Away from the click, nothing changes.
+  assert.equal(y[1000], x[1000]);
+  assert.equal(y[40000], x[40000]);
+});
+
+test('with VoxCPM2, a question needs a delivery note and a line of its own', async () => {
+  const { review } = await import('./speak.mjs');
+  const script = 'So how long does it take?\nDays. And the bees, what do they do?\n(calm, curious tone, rising intonation) Where does it go?';
+  const flagged = review(script, { notes: true }).map((r) => [r.line, r.text]);
+  assert.deepEqual(flagged, [[1, 'So how long does it take?'], [2, 'And the bees, what do they do?']]);
+  assert.deepEqual(review(script), []);
 });

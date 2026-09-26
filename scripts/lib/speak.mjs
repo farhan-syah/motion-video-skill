@@ -112,7 +112,9 @@ export function phrases(script) {
 // ones keep it steadier and its delivery connected. A beat over `max` words splits at a sentence end, since long
 // inputs make the model unstable. lines: every line break also splits (a timed script places each line at its time).
 // Each chunk keeps its sentences, to speak them one by one when the whole chunk keeps failing.
-export function chunks(script, { lines = false, max = 40 } = {}) {
+// whole: blank lines and [pause] marks stay inside a chunk (their silence is set after generation), so the script is
+// one take up to `max` words: one draw of the voice, with no seams for it to drift across.
+export function chunks(script, { lines = false, max = 40, whole = false } = {}) {
   const out = [];
   let group = [];
   const count = (list) => list.reduce((n, p) => n + p.text.split(/\s+/).length, 0);
@@ -138,7 +140,7 @@ export function chunks(script, { lines = false, max = 40 } = {}) {
       flush();
       delivery = null;
     }
-    if (!(p.kind === 'sentence' || (p.kind === 'line' && !lines))) flush();
+    if (!(p.kind === 'sentence' || (p.kind === 'line' && !lines) || (whole && (p.kind === 'beat' || p.kind === 'mark')))) flush();
   }
   flush();
   return out;
@@ -388,6 +390,27 @@ export function clicks(x, rate = 48000) {
   return out;
 }
 
+// Repairs clicks in place: each click time's 4 ms is smoothed (a 17-sample moving average), blended in over 1 ms at
+// each edge. A click is a discontinuity about a millisecond long, so smoothing it away leaves the speech around it.
+export function declick(x, times, rate = 48000) {
+  const y = Float32Array.from(x);
+  const half = Math.round(0.002 * rate);
+  const blend = Math.round(0.001 * rate);
+  for (const t of times) {
+    // clicks() reports the start of a 2 ms hop: the discontinuity sits inside it.
+    const c = Math.round((t + 0.001) * rate);
+    for (let k = Math.max(8, c - half - blend); k < Math.min(x.length - 8, c + half + blend); k++) {
+      let m = 0;
+      for (let j = -8; j <= 8; j++) m += x[k + j];
+      m /= 17;
+      const d = Math.abs(k - c);
+      const w = d <= half ? 1 : 1 - (d - half) / blend;
+      y[k] = x[k] * (1 - w) + m * w;
+    }
+  }
+  return y;
+}
+
 function samples(file) {
   const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', file, '-ac', '1', '-ar', '48000', '-f', 'f32le', '-'], { maxBuffer: 1 << 30 });
   if (r.status !== 0) throw new Error(`speak: ffmpeg cannot decode ${file}.`);
@@ -401,10 +424,12 @@ const clip = (t, n = 140) => (t.length > n ? `${t.slice(0, n)}…` : t);
 // A script read the way a voice will read it, before any audio: what the voice is likely to misread or run together.
 // Returns [{ line, text, note }]. Judgment the rules cannot make (a word that reads as a noun or a verb) stays with
 // the writer: narration.md, Prepare the script for speech.
-export function review(script, { language } = {}) {
+// notes: the engine voices delivery notes (VoxCPM2), so a question without its own note is flagged.
+export function review(script, { language, notes = false } = {}) {
   const out = [];
   const english = !language || /^en/i.test(language);
   script.replace(/\r/g, '').split('\n').forEach((raw, n) => {
+    const noted = LEAD.test(raw);
     const line = raw.replace(LEAD, '').trim();
     if (!line) return;
     const where = n + 1;
@@ -420,7 +445,14 @@ export function review(script, { language } = {}) {
     }
     for (const s of said.match(/[^.!?…]+[.!?…]*/g) ?? []) {
       const words = s.trim().split(/\s+/).filter(Boolean);
-      if (words.length > 20 && !/[,;:—–]/.test(s)) out.push({ line: where, text: `${words.slice(0, 6).join(' ')}…`, note: `${words.length} words with no comma: the voice picks its own breath points. A comma sets them` });
+      if (words.length > 14 && !/[,;:—–…]/.test(s)) out.push({ line: where, text: `${words.slice(0, 6).join(' ')}…`, note: `${words.length} words with no comma: the voice picks its own breath points. A comma sets them` });
+    }
+    // A delivery note covers its whole line, and a line without one takes the take's delivery.
+    if (notes) {
+      const parts = said.match(/[^.!?…]+[.!?…]*/g)?.map((x) => x.trim()).filter(Boolean) ?? [];
+      const asks = parts.filter((x) => /\?["'”’)]*$/.test(x));
+      if (asks.length && !noted) out.push({ line: where, text: asks[0], note: 'a question with no delivery note: VoxCPM2 reads it in the take\'s delivery, and it can come out as a statement. Give it its own line with a note (tts/voxcpm2.md)' });
+      else if (asks.length && parts.length > asks.length) out.push({ line: where, text: asks[0], note: 'a question shares its line with other sentences: its note covers them too. Give the question a line of its own' });
     }
     if (/\p{L}/u.test(said) && !/[.!?…:;,"'”’)\]]$/u.test(said.trim())) out.push({ line: where, text: said.trim().split(/\s+/).slice(-3).join(' '), note: 'no end punctuation: the voice runs into the next line' });
   });
@@ -434,9 +466,15 @@ export const STRAY_PAUSE = 0.45;
 export function strayPauses(heard, text, alignScript) {
   const out = [];
   const al = alignScript(heard, text);
+  // A break after a word: its own trailing punctuation, or a dash or ellipsis standing alone before the next word.
+  const breaks = [];
+  for (const tok of text.split(/\s+/)) {
+    if (/[\p{L}\p{N}%]/u.test(tok)) breaks.push(/[,.;:!?…—–-]["'”’)\]]*$/.test(tok));
+    else if (breaks.length && /[—–…-]/.test(tok)) breaks[breaks.length - 1] = true;
+  }
   for (let i = 0; i + 1 < al.length; i++) {
     const [a, b] = [al[i], al[i + 1]];
-    if (a.end == null || b.start == null || /[,.;:!?…—–-]["'”’)\]]*$/.test(a.text)) continue;
+    if (a.end == null || b.start == null || breaks[i]) continue;
     const gap = b.start - a.end;
     if (gap > STRAY_PAUSE) out.push({ after: a.text, before: b.text, gap: +gap.toFixed(2) });
   }
@@ -464,7 +502,7 @@ async function heardCheck(file, text, language) {
     doubt = [...new Set(off(c).filter((w) => off(c2).includes(w)))];
   }
   const { alignScript } = await import('./voice.mjs');
-  return { ...c, doubt, pauses: strayPauses(t.words, text, alignScript), heard: clip(t.words.map((w) => w.text).join(' ')) };
+  return { ...c, doubt, words: t.words, pauses: strayPauses(t.words, text, alignScript), heard: clip(t.words.map((w) => w.text).join(' ')) };
 }
 
 // VoxCPM2 through its runner (scripts/tts/voxcpm_speak.py). uv builds the Python environment on first use (PyTorch,
@@ -474,11 +512,12 @@ async function heardCheck(file, text, language) {
 // the script's opening (about 10 s), saved beside the audio to listen to. Then each beat (chunks) is one generation
 // that clones it, transcribed back and checked. A failed take is regenerated with another seed, up to 3 tries, and the
 // best take is kept. A beat that fails every take is spoken sentence by sentence instead.
-async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.6, steps = 16, device, seed: asked, configSeed, language, reroll = [], lines = false }, out) {
+async function voxcpm(script, { voice = '', reference = '', style = '', hifi = false, cfg = 1.6, steps = 16, device, seed: asked, configSeed, language, reroll = [], lines = false }, out) {
   const ready = voxcpmReady();
   if (!ready.ok && !device) throw new Error(`speak --engine voxcpm ${ready.why}. Use the default Kokoro engine, another TTS with --command, or --device cpu (very slow).`);
   if (!voice && !reference) console.error('speak: no --voice given, so VoxCPM2 picks its own voice. Design one with --voice "(age, pitch, tone, accent)" (references/tts/voxcpm2.md).');
-  let units = chunks(script, { lines });
+  // One take for the whole script: one draw of the voice. A timed script keeps each line apart, to place it.
+  let units = chunks(script, lines ? { lines } : { whole: true, max: 700 });
   if (!units.length) throw new Error('speak: the script is empty.');
   for (const n of reroll) if (!(n >= 1 && n <= units.length)) throw new Error(`speak --reroll ${n}: the script has parts 1 to ${units.length}.`);
   // VoxCPM2 garbles a part of one or two words far more often than a longer one.
@@ -509,12 +548,24 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
   const anchorKey = reference ? null : hash('reference', seed, language ?? '');
   const anchorFile = anchorKey ? join(cache, `voice-${anchorKey}.wav`) : null;
   // Takes made at the runner's own settings (cfg 2, 10 steps) keep their older keys.
-  const takeFile = (s) => join(cache, `${hash(anchorKey, s.style ?? style, s.text, s.seed, ...(cfg !== 2 || steps !== 10 ? [cfg, steps] : []))}.wav`);
+  const takeFile = (s) => join(cache, `${hash(anchorKey, s.style ?? style, s.text, s.seed, ...(cfg !== 2 || steps !== 10 ? [cfg, steps] : []), ...(hifi ? ['hifi'] : []))}.wav`);
   // The designed voice speaks the script's opening, 25 words or more: a clip long enough for every part to hold it.
   const opening = [];
   for (const p of phrases(script)) {
     opening.push(p.text);
     if (opening.join(' ').split(/\s+/).length >= 25) break;
+  }
+  // Hi-Fi cloning: the reference and its exact transcript, which holds the voice closer to the reference. A designed
+  // voice keeps the words it was designed on; a user's recording is transcribed. VoxCPM2 ignores the style then.
+  let hifiText = null;
+  if (hifi) {
+    const saidFile = anchorFile?.replace(/\.wav$/, '.txt');
+    if (reference) {
+      const { transcribe, asrModel } = await import('./voice.mjs');
+      hifiText = (await transcribe(reference, { model: asrModel(language), language })).words.map((w) => w.text).join(' ');
+    } else if (saidFile && existsSync(saidFile)) hifiText = readFileSync(saidFile, 'utf8').trim();
+    if (!hifiText && anchorFile && existsSync(anchorFile)) console.error('speak --hifi: this designed voice has no saved transcript (it was made before --hifi existed). Pass a new --seed to design it again with one, or drop --hifi.');
+    if (hifiText && style) console.error('speak --hifi: VoxCPM2 ignores --style in Hi-Fi cloning. Delivery notes on a line still apply to that line.');
   }
   try {
     const runner = fileURLToPath(new URL('../tts/voxcpm_speak.py', import.meta.url));
@@ -530,6 +581,7 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
       const args = ['run', '--quiet', runner, '--sentences', listFile, '--dir', dir, '--model', checkpoint ?? VOXCPM, '--cfg', String(cfg), '--steps', String(steps)];
       if (voice && designing) args.push('--voice', voice);
       if (style && !designing) args.push('--style', style);
+      if (hifiText && !designing) args.push('--prompt-text', hifiText);
       if (reference) args.push('--reference', reference);
       else if (!designing) args.push('--reference', anchorFile);
       // The runner's own output (compiler warnings, library notices) stays out of the way: its progress lines show,
@@ -547,6 +599,9 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
       console.error(`speak: designing the voice from --voice, speaking the script's opening: "${opening.join(' ')}"`);
       generate([{ index: 0, text: say(opening.join(' ')), seed }], true);
       copyFileSync(join(dir, 'anchor.wav'), anchorFile);
+      // The words the reference says, for Hi-Fi cloning, which needs its exact transcript.
+      writeFileSync(anchorFile.replace(/\.wav$/, '.txt'), say(opening.join(' ')));
+      if (hifi) hifiText = say(opening.join(' '));
     }
     // The voice sits beside the audio too: listen to it before judging the rest, and pass it as --reference to give
     // another video the same voice.
@@ -558,9 +613,15 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
       const take = takeFile(s);
       const tidied = take.replace(/\.wav$/, '.tidy.wav');
       const t = tidy(samples(take));
-      if (!existsSync(tidied)) writeFileSync(tidied, wav([t.samples], 48000).buf);
+      // A click is repaired in place before judging: one click in a long take no longer throws the take away.
+      let pops = clicks(t.samples);
+      if (pops.length) {
+        const fixed = declick(t.samples, pops);
+        const left = clicks(fixed);
+        if (left.length < pops.length) (t.samples = fixed), (pops = left);
+      }
+      writeFileSync(tidied, wav([t.samples], 48000).buf);
       const c = await heardCheck(tidied, sayable(s.text), language);
-      const pops = clicks(t.samples);
       const faults = [...t.faults, ...(pops.length ? [`a click at ${pops.map((v) => `${v}s`).join(', ')} into the part`] : [])];
       if (faults.length) {
         c.ok = false;
@@ -608,47 +669,57 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
       return best;
     };
     let best = await pick(units, reroll);
-    // A beat that failed every take is spoken sentence by sentence: shorter inputs keep the model stable. Each
-    // sentence remembers its beat, so the phrase spans stay one per beat.
-    let origin = units.map((_, i) => i);
-    const split = units.map((u, i) => !best[i].ok && u.sentences.length > 1);
-    if (split.some(Boolean)) {
-      console.error(`speak: part(s) ${split.map((s, i) => (s ? i + 1 : null)).filter(Boolean).join(', ')} failed every take whole, so their sentences are spoken one by one.`);
-      const next = [];
-      const from = [];
-      units.forEach((u, i) => {
-        const parts = split[i] ? u.sentences.map((p, k) => ({ text: p.text, pause: k === u.sentences.length - 1 ? u.pause : p.pause, sentences: [p], ...(u.delivery ? { delivery: u.delivery } : {}) })) : [u];
-        for (const p of parts) {
-          next.push(p);
-          from.push(i);
-        }
+    // A take that failed every try is split and spoken again: into its beats first, then a beat into its sentences.
+    // Shorter inputs keep the model stable, at the cost of more draws of the voice.
+    const breakUp = (u) => {
+      const groups = [];
+      let g = [];
+      u.sentences.forEach((p, k) => {
+        g.push(p);
+        if (p.kind === 'beat' || p.kind === 'mark' || k === u.sentences.length - 1) (groups.push(g), (g = []));
       });
-      units = next;
-      origin = from;
+      const pieces = groups.length > 1 ? groups : u.sentences.map((p) => [p]);
+      return pieces.map((ps, k) => ({ text: ps.map((p) => p.text).join(' '), pause: k === pieces.length - 1 ? u.pause : ps[ps.length - 1].pause, kind: ps[ps.length - 1].kind, sentences: ps, ...(u.delivery ? { delivery: u.delivery } : {}) }));
+    };
+    for (let round = 0; round < 2; round++) {
+      const split = units.map((u, i) => !best[i].ok && u.sentences.length > 1);
+      if (!split.some(Boolean)) break;
+      console.error(`speak: part(s) ${split.map((s, i) => (s ? i + 1 : null)).filter(Boolean).join(', ')} failed every take whole, so ${round ? 'their sentences' : 'their beats'} are spoken apart.`);
+      units = units.flatMap((u, i) => (split[i] ? breakUp(u) : [u]));
       best = await pick(units, []);
     }
-    // Delivery: a part whose pitch swings far above the voice's usual pitch tends to sound shouted or excited, which
-    // the speech check cannot hear. It is flagged for a listen.
+    // Each take is shaped: its sentences found in the audio, the silence at each blank line and [pause] set to its
+    // length, and each sentence's pitch swing measured. A part whose pitch swings far above the voice's usual pitch
+    // tends to sound shouted or excited, which the speech check cannot hear. It is flagged for a listen.
     const voiceMedian = medianPitch(samples(reference || anchorFile));
-    for (const b of best) b.heat = +heat(samples(b.file), voiceMedian).toFixed(2);
-    const parts = best.flatMap((b, i) => [samples(b.file), new Float32Array(Math.round(units[i].pause * 48000))]);
+    const { alignScript } = await import('./voice.mjs');
+    const shaped = best.map((b, i) => shapeTake(samples(b.file), b.words, units[i].sentences, alignScript));
+    best.forEach((b, i) => {
+      // A question rises on purpose, so it is left out.
+      const hot = shaped[i].spans.filter((sp) => !/\?["'”’)]*$/.test(sp.text.trim())).map((sp) => ({ text: sp.text, heat: heat(shaped[i].audio.subarray(Math.round(sp.start * 48000), Math.round(sp.end * 48000)), voiceMedian) }));
+      const top = hot.reduce((a, h) => (h.heat > a.heat ? h : a), { heat: 0 });
+      b.heat = +top.heat.toFixed(2);
+      b.hotText = top.text;
+    });
+    const parts = shaped.flatMap((s, i) => [s.audio, new Float32Array(Math.round(units[i].pause * 48000))]);
     const r = wav(parts, 48000);
     writeFileSync(out, r.buf);
     writeFileSync(record, JSON.stringify({ seed, takes: Object.fromEntries(best.map((b, i) => [units[i].text, b.seed])) }, null, 1));
-    const placed = spans(units, parts, 48000);
-    // One span per beat, however it was spoken.
-    const beatSpans = [];
-    placed.forEach((p, k) => {
-      const last = beatSpans[beatSpans.length - 1];
-      if (last && last.origin === origin[k]) Object.assign(last, { text: `${last.text} ${p.text}`, end: p.end });
-      else beatSpans.push({ ...p, origin: origin[k] });
+    // One span per sentence on the whole voiceover's clock.
+    const sentenceSpans = [];
+    const partStart = [];
+    let t = 0;
+    shaped.forEach((s, i) => {
+      partStart.push(t);
+      for (const sp of s.spans) sentenceSpans.push({ text: spoken(sp.text), start: +(t + sp.start).toFixed(3), end: +(t + sp.end).toFixed(3) });
+      t += s.audio.length / 48000 + units[i].pause;
     });
     const failed = best.map((b, i) => ({ ...b, i })).filter((b) => !b.ok);
     return {
       duration: r.duration,
-      phrases: beatSpans.map(({ origin: _, ...p }) => ({ ...p, text: spoken(p.text) })),
+      phrases: sentenceSpans,
       voiceFile,
-      checks: best.map((b, i) => ({ at: placed[i].start, text: spoken(units[i].text), ok: b.ok, heard: b.heard, why: b.why, seed: b.seed, doubt: b.doubt ?? [], heat: b.heat, pauses: b.pauses ?? [] })),
+      checks: best.map((b, i) => ({ at: +partStart[i].toFixed(2), text: spoken(units[i].text), ok: b.ok, heard: b.heard, why: b.why, seed: b.seed, doubt: b.doubt ?? [], heat: b.heat, hotText: b.hotText, pauses: b.pauses ?? [] })),
       problems: failed.map((b) => `part ${b.i + 1} "${units[b.i].text}": ${b.why} (heard "${b.heard}"). Three takes failed, so reword it first (a longer line, another word order). --reroll ${b.i + 1} draws new takes.`),
     };
   } finally {
@@ -757,6 +828,152 @@ export function deEss(x, rate = 48000, stats = null) {
   return out;
 }
 
+// A take's sentences found in its audio from the heard words, and its silences set: at each blank line and [pause]
+// mark inside the take, the gap between two sentences is widened to the script's pause, at its quietest 10 ms.
+// Returns the audio and one span per sentence, in seconds. Without usable word times the take stays one span.
+export function shapeTake(audio, heard, sentences, alignScript) {
+  const rate = 48000;
+  const whole = { audio, spans: [{ text: sentences.map((p) => p.text).join(' '), start: 0, end: +(audio.length / rate).toFixed(3) }] };
+  if (!heard?.length || sentences.length < 2) return whole;
+  const texts = sentences.map((p) => sayable(p.text));
+  const counts = texts.map((t) => t.split(/\s+/).filter((w) => /[\p{L}\p{N}%]/u.test(w)).length);
+  const al = alignScript(heard, texts.join(' '));
+  if (al.length !== counts.reduce((a, b) => a + b, 0)) return whole;
+  const bounds = [];
+  let k = 0;
+  for (const c of counts) {
+    const ws = al.slice(k, k + c);
+    k += c;
+    bounds.push({ start: ws.find((w) => w.start != null)?.start, end: [...ws].reverse().find((w) => w.end != null)?.end });
+  }
+  if (bounds.some((b) => b.start == null || b.end == null)) return whole;
+  const inserts = [];
+  sentences.forEach((p, i) => {
+    if (i + 1 >= sentences.length || (p.kind !== 'beat' && p.kind !== 'mark')) return;
+    const gap = bounds[i + 1].start - bounds[i].end;
+    if (gap >= p.pause) return;
+    const a = Math.round(bounds[i].end * rate);
+    const b = Math.max(a + 480, Math.round(bounds[i + 1].start * rate));
+    let at = a;
+    let low = Infinity;
+    for (let x = a; x + 480 <= b && x + 480 <= audio.length; x += 240) {
+      let e = 0;
+      for (let j = x; j < x + 480; j++) e += audio[j] * audio[j];
+      if (e < low) (low = e), (at = x + 240);
+    }
+    inserts.push({ at, n: Math.round((p.pause - Math.max(0, gap)) * rate) });
+  });
+  const pieces = [];
+  let from = 0;
+  for (const ins of inserts) {
+    pieces.push(audio.subarray(from, ins.at), new Float32Array(ins.n));
+    from = ins.at;
+  }
+  pieces.push(audio.subarray(from));
+  const out = new Float32Array(pieces.reduce((n, p) => n + p.length, 0));
+  let o = 0;
+  for (const p of pieces) (out.set(p, o), (o += p.length));
+  const shiftAt = (t) => inserts.filter((ins) => ins.at <= t * rate).reduce((n, ins) => n + ins.n, 0) / rate;
+  const spans = sentences.map((p, i) => ({ text: p.text, start: +Math.max(0, bounds[i].start - 0.05 + shiftAt(bounds[i].start)).toFixed(3), end: +(bounds[i].end + 0.05 + shiftAt(bounds[i].start)).toFixed(3) }));
+  return { audio: out, spans };
+}
+
+// Time-stretches samples by a speed factor, pitch kept (ffmpeg atempo): 1.1 is 10% faster.
+function atempo(x, speed) {
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'f32le', '-ar', '48000', '-ac', '1', '-i', '-', '-af', `atempo=${speed.toFixed(4)}`, '-f', 'f32le', '-'], { input: Buffer.from(x.buffer, x.byteOffset, x.byteLength), maxBuffer: 1 << 30 });
+  return r.status === 0 ? new Float32Array(Uint8Array.from(r.stdout).buffer) : x;
+}
+
+// Loudness of the sounding 10 ms frames of a span, in dB. Null when it holds no speech.
+function speechLevel(x, start, end, rate = 48000) {
+  const hop = rate / 100;
+  let e = 0;
+  let n = 0;
+  for (let i = Math.floor(start * rate); i + hop <= Math.min(x.length, Math.ceil(end * rate)); i += hop) {
+    let f = 0;
+    for (let k = i; k < i + hop; k++) f += x[k] * x[k];
+    if (Math.sqrt(f / hop) > 0.01) (e += f), (n += hop);
+  }
+  return n ? 10 * Math.log10(e / n) : null;
+}
+
+// The voice layer's own processing, sentence by sentence, for any engine's output:
+// - pace: a sentence more than 12% off the median pace is time-stretched to the edge of that band, by at most 15%,
+//   pitch kept. Natural variation inside the band stays; a take that slows toward its end is pulled back. Sentences
+//   under 1 s of speech are left as they are. A timed script keeps its pace, so its lines stay on time.
+// - level: each sentence's speech is brought toward the median level, by at most 6 dB, with 40 ms ramps. A long take
+//   starts louder than it goes on; this evens it.
+// - de-essing (deEss).
+// Rewrites the file and returns the moved sentence spans and what was done.
+export function polish(file, phrases, { pace: evenPace = true } = {}) {
+  const rate = 48000;
+  let x = samples(file);
+  let spans = phrases.map((p) => ({ ...p }));
+  const stats = { paced: 0, maxStretch: 0, leveled: 0, maxGain: 0 };
+  if (evenPace && spans.length >= 3) {
+    const rates = spans.map((sp) => {
+      const d = sounding(x, sp.start, sp.end);
+      return d >= 1 ? syllables(sp.text) / d : null;
+    });
+    const valid = rates.filter(Boolean);
+    const med = percentile(valid, 0.5);
+    if (valid.length >= 3) {
+      const pieces = [];
+      const moved = [];
+      let cursor = 0;
+      let shift = 0;
+      spans.forEach((sp, i) => {
+        const a = Math.max(cursor, Math.round(sp.start * rate));
+        const b = Math.max(a, Math.round(sp.end * rate));
+        pieces.push(x.subarray(cursor, a));
+        let seg = x.subarray(a, b);
+        const r = rates[i];
+        if (r && Math.abs(r / med - 1) > 0.12) {
+          const edge = r < med ? med * 0.88 : med * 1.12;
+          const speed = Math.min(1.15, Math.max(1 / 1.15, edge / r));
+          seg = atempo(seg, speed);
+          stats.paced++;
+          stats.maxStretch = Math.max(stats.maxStretch, Math.abs(speed - 1));
+        }
+        const start = a / rate + shift;
+        pieces.push(seg);
+        moved.push({ ...sp, start: +start.toFixed(3), end: +(start + seg.length / rate).toFixed(3) });
+        shift += seg.length / rate - (b - a) / rate;
+        cursor = b;
+      });
+      pieces.push(x.subarray(cursor));
+      const y = new Float32Array(pieces.reduce((n, p) => n + p.length, 0));
+      let o = 0;
+      for (const p of pieces) (y.set(p, o), (o += p.length));
+      x = y;
+      spans = moved;
+    }
+  }
+  const levels = spans.map((sp) => speechLevel(x, sp.start, sp.end));
+  const target = percentile(levels.filter((l) => l != null), 0.5);
+  if (levels.filter((l) => l != null).length >= 2) {
+    const ramp = Math.round(0.04 * rate);
+    spans.forEach((sp, i) => {
+      if (levels[i] == null) return;
+      const g = Math.max(-6, Math.min(6, target - levels[i]));
+      if (Math.abs(g) < 1) return;
+      stats.leveled++;
+      stats.maxGain = Math.max(stats.maxGain, Math.abs(g));
+      const lin = 10 ** (g / 20);
+      const a = Math.round(sp.start * rate);
+      const b = Math.min(x.length, Math.round(sp.end * rate));
+      for (let k = a; k < b; k++) {
+        const edge = Math.min(1, (k - a) / ramp, (b - k) / ramp);
+        x[k] *= 1 + (lin - 1) * edge;
+      }
+    });
+  }
+  const ess = {};
+  x = deEss(x, rate, ess);
+  writeFileSync(file, wav([x], rate).buf);
+  return { phrases: spans, stats: { ...stats, essShare: ess.share ?? 0, essDeepest: ess.deepest ?? 0 } };
+}
+
 // De-esses a generated voiceover file in place.
 export function deEssFile(file) {
   const stats = {};
@@ -799,9 +1016,13 @@ const percentile = (list, p) => {
 // How far a part's pitch peaks (95th percentile) rise above the voice's usual pitch (the reference's median). A calm
 // read stays under about 1.5; a part over 1.6 tends to sound shouted or excited.
 export const HEATED = 1.6;
+// Readings more than an octave off the part's own median are tracking errors, and dropped. A part with under 40
+// readings (about 0.8 s of voicing) is too short to judge.
 export function heat(part, voiceMedian) {
   const p = pitches(part);
-  return p.length && voiceMedian ? percentile(p, 0.95) / voiceMedian : 0;
+  const own = percentile(p, 0.5);
+  const kept = p.filter((f) => f < own * 1.9 && f > own / 1.9);
+  return kept.length >= 40 && voiceMedian ? percentile(kept, 0.95) / voiceMedian : 0;
 }
 export const medianPitch = (x) => percentile(pitches(x), 0.5);
 
@@ -930,7 +1151,7 @@ export async function speak(script, out, opts = {}) {
   const engine = opts.engine ?? (opts.command || opts.model ? null : tts.engine);
   if (engine === 'voxcpm') {
     const voice = opts.voice ?? tts.voice ?? '';
-    const r = await voxcpm(script, { voice, reference: opts.reference ?? tts.reference ?? '', style: opts.style ?? tts.style ?? '', cfg: opts.cfg ?? tts.cfg ?? 1.6, steps: opts.steps ?? tts.steps ?? 16, device: opts.device, seed: opts.seed, configSeed: tts.seed, language: opts.language, reroll: opts.reroll ?? [], lines: !!opts.lines }, out);
+    const r = await voxcpm(script, { voice, reference: opts.reference ?? tts.reference ?? '', style: opts.style ?? tts.style ?? '', hifi: opts.hifi ?? tts.hifi ?? false, cfg: opts.cfg ?? tts.cfg ?? 1.6, steps: opts.steps ?? tts.steps ?? 16, device: opts.device, seed: opts.seed, configSeed: tts.seed, language: opts.language, reroll: opts.reroll ?? [], lines: !!opts.lines }, out);
     return { ...r, engine: `VoxCPM2${voice ? ` ${voice}` : ''}` };
   }
   if (engine && engine !== 'kokoro') throw new Error(`speak --engine "${engine}": use kokoro or voxcpm, or --model / --command for other engines.`);

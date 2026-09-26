@@ -40,6 +40,8 @@ def main():
     ap.add_argument("--style", default="")
     # Guidance: 1.0-2.0 relaxed and natural, above 2.0 stricter to the text with more noise. Steps: 4-30, more is more
     # natural and slower.
+    # Hi-Fi cloning: the reference's exact transcript. Identity holds far closer; the model ignores style then.
+    ap.add_argument("--prompt-text", default="")
     ap.add_argument("--cfg", type=float, default=2.0)
     ap.add_argument("--steps", type=int, default=10)
     a = ap.parse_args()
@@ -59,7 +61,9 @@ def main():
     for n, s in enumerate(todo):
         # The seed makes a take repeatable: the same sentence and seed give the same audio.
         torch.manual_seed(s["seed"])
-        if anchor:
+        if anchor and a.prompt_text and not s.get("style"):
+            wav = model.generate(text=s["text"], prompt_wav_path=anchor, prompt_text=a.prompt_text, reference_wav_path=anchor, cfg_value=a.cfg, inference_timesteps=a.steps)
+        elif anchor:
             # A part's own delivery note ("(asking a question)") replaces --style for it.
             wav = model.generate(text=f"{paren(s.get('style', '')) or style}{s['text']}", reference_wav_path=anchor, cfg_value=a.cfg, inference_timesteps=a.steps)
         else:

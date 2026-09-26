@@ -28,7 +28,19 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
 - **One voice** per video, matched to the subject and audience. A described voice names what the audience hears as their own: age, accent, region, tone.
 - **Script first:** when the skill writes the script, it comes before any audio. Every fact in it comes from the gathered facts (`direction.md`, §0).
 - **Native wording:** write in the audience's spoken language, never translated from English. Use a native short-video narrator's words, not textbook register. Follow a writing skill for that language when one exists.
-- **Spoken, not read:** short phrases, one per line, with a beat before a number or a reveal.
+- **Spoken, not read:** short phrases, one per line, with a beat before a number or a reveal. Written prose read aloud sounds flat. A speaker uses devices like these, as a range to draw from, never a menu:
+
+  | Device                     | What the listener hears                     | For example                                    |
+  | -------------------------- | ------------------------------------------- | ---------------------------------------------- |
+  | Contractions               | Speech, not a document                      | "it's", "you'll", "that's"                     |
+  | Varied sentence length     | Rhythm. A short line after a long one lands | "It took three years. Three."                  |
+  | A question to the listener | An invitation to think along                | "So where does all that water go?"             |
+  | An aside                   | A person talking, not a manual              | "— and yes, it's free —"                       |
+  | A connecting reaction      | A turn in the thought                       | "Okay.", "Here's the thing:", "Right,"         |
+  | A held pause               | Suspense before a reveal                    | "And then… the door opened."                   |
+  | A sound a person makes     | A laugh, a sigh, a thinking sound           | `[laughing]`, `[sigh]`, `[Uhm]` (VoxCPM2 tags) |
+  | A change of feeling        | Emotion that moves with the story           | A delivery note on that line (VoxCPM2)         |
+
 - **First line orients:** it names the subject or the question, before any scenario ("Three ways to cut your water bill.", not "So you open the app.").
 - **Pace:** `speak` aims at about 4.1 syllables per second while speaking (3.5 to 4.7), a relaxed explainer. Match it to the narration: a lesson reads slower, a launch or an ad faster. A natural take inside the range needs no `--speed`. `speak` prints the pace and the `--speed` that reaches it (`0.85` is 15% slower, pitch kept). `--pace 4.2` sets another target, for a calmer or brisker read. `"tts": { "speed": 0.9, "pace": 4.3 }` sets both for every video.
 
@@ -42,10 +54,18 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
 
 A voice reads only the text. Its punctuation, spelling and word order are all it has for pauses, stress and pronunciation. Prepare the whole script before `speak`:
 
-1. **Run `speak script.txt --review`.** It generates nothing and lists what a voice is likely to misread: flags, file names and addresses, letters mixed with digits, digits outside English, long sentences with no comma, and lines with no end punctuation.
-2. **Read each sentence as it will be heard.** A comma or period marks every break a listener needs. A word that can be a noun or a verb after a noun ("recognition times each word", "the project records sound") can be read as part of the noun, which moves the pause. A comma or a rewording fixes the reading.
+1. **Run `speak script.txt --review`.** It generates nothing and lists what a voice is likely to misread: flags, file names and addresses, letters mixed with digits, digits outside English, long sentences with no comma, lines with no end punctuation, and with VoxCPM2 a question without its own delivery note.
+2. **Punctuate for the ear, not for grammar.** The voice pauses only where the text marks it:
+   - **Comma:** a short breath. Put one wherever a listener needs the break, even where grammar has none: after a long or ambiguous subject ("Whisper, times every word."), before a new clause, around an aside.
+   - **Period:** the end of a thought, with a full stop in the voice. Split a long sentence into two for a stronger break.
+   - **Ellipsis "…":** a trailing or held pause, for suspense or a thought left open.
+   - **Dash "—":** an aside or a turn, with a pause on each side.
+   - **Question mark:** the rising end of a question.
+
+   Read each sentence as it will be heard. A word that can be a noun or a verb after a noun ("recognition times each word") is read as part of the noun unless a comma or a rewording separates them. Captions show this punctuation too.
+
 3. **Give every unusual token a spoken form** with `{written|spoken}`: names, acronyms the voice might say as a word, symbols, file names, versions.
-4. **End every question with "?"**, and every statement with a period.
+4. **End every question with "?"**, and every statement with a period. With VoxCPM2, a question also needs a line of its own with a delivery note, or the take's delivery can flatten it into a statement (`tts/voxcpm2.md`). `--review` flags a question without one.
 5. **Run `--review` again**, then `speak`.
 
 After `speak`, its check reports what still went wrong in the audio (Speech check, below).
@@ -59,13 +79,23 @@ After `speak`, its check reports what still went wrong in the audio (Speech chec
 | Sentence end inside a line | 0.3 s                          |
 | `[pause]` / `[pause 1.2]`  | 0.6 s / exactly 1.2 s          |
 
-Kokoro, Hugging Face models and the user's TTS keep every mark exact. VoxCPM2 keeps blank lines and `[pause]` exact, and sets the pauses inside a beat from its punctuation (`tts/voxcpm2.md`).
+Kokoro, Hugging Face models and the user's TTS keep every mark exact. VoxCPM2 speaks the script as one take and sets its pauses from punctuation. `speak` then sets the silence at each blank line and `[pause]` mark to its length (`tts/voxcpm2.md`).
 
 ### Writing for a generated voice
 
 - **Numbers:** in languages other than English, write them as words. A voice can read digits in English. Captions show the spoken words.
 - **Written and spoken forms:** when a name or term must be said differently from how it is written, write both: `{VoxCPM2|Vox C P M two}`, `{uv|U V}`, `{--command|dash dash command}`. Captions and on-screen text show the written form. The voice says the spoken form, and the speech check listens for it. Never write a spelled-out form alone, or captions show it.
 - **Engine rules:** delivery notes, tags and other engine-specific writing live in the engine's guide.
+
+### Voice polish
+
+`speak` processes the generated voice as its own layer, sentence by sentence, and reports what it did. `--raw` skips it.
+
+- **Pace:** a sentence more than 12% off the median pace is time-stretched to the edge of that band, by at most 15%, pitch kept. A long take tends to slow toward its end. Sentences under 1 s of speech stay as they are. A timed script keeps its pace.
+- **Loudness:** each sentence's speech moves toward the median level, by at most 6 dB, with 40 ms ramps. A long take tends to start louder than it goes on.
+- **De-essing:** where an "s" rises above the voice's vowels, the 4.5–11 kHz band is turned down to 4 dB under them.
+
+The user's own recordings never pass through it.
 
 ### Speech check
 

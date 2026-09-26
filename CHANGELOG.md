@@ -6,6 +6,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `speak` polishes a generated voice sentence by sentence: pace and loudness evened, then de-essing. `--raw` skips it.
+- `render` writes each audio layer to `out/stems/`: voice, music and effects, as they sit in the mix.
+- `speak --hifi` clones VoxCPM2 from the reference and its exact transcript. A designed voice saves the words it was designed on.
+
+### Changed
+
+- VoxCPM2 speaks the whole script as one take, then sets the silence at each blank line and `[pause]` mark. A failing take is spoken again by beats, then by sentences.
+- VoxCPM2 phrase spans are per sentence.
+- The pitch-swing check runs per sentence and skips questions, sentences under 0.8 s of voicing and octave errors.
+- `narration.md` covers punctuating a script for the ear: what a comma, period, ellipsis, dash and question mark do to the voice.
+- `speak --review` flags sentences over 14 words with no inner punctuation, and with VoxCPM2 a question without its own line and delivery note.
+- `narration.md` lists the devices spoken narration uses, and the VoxCPM2 guide states what makes a read flat or expressive.
+- The VoxCPM2 guide states how delivery notes behave, with an example of a script directed where it turns.
+
+### Fixed
+
+- A dash or ellipsis standing alone counts as a break in the stray-pause check.
+- A click in a take is repaired in place before the take is judged, instead of failing the take.
+
 ## [1.3.0] - 2026-09-26
 
 ### Added

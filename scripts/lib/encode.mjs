@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 const BT709 = ['-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv'];
 
@@ -96,7 +97,9 @@ export async function concatSegments(segments, listPath, out) {
 // Each sfx clip may carry `space` (0-1): its send into the shared room. Dry UI sounds send nothing.
 // fxStem (optional): a path for the effects alone, as they sit in the mix (ducked, with their room), before the
 // loudness gain. Written only when voice is present: the audit judges effects on it, since speech dominates the mix.
-export async function muxAudio(video, out, { voice = [], sfx = [], music = null, direction = null, bed = null, fxStem = null }, total) {
+// stems (optional): a directory for every layer alone as it sits in the mix, before the loudness gain: voice.wav,
+// music.wav and effects.wav (with their room), each with the mix's fades. Together they sum to the mix.
+export async function muxAudio(video, out, { voice = [], sfx = [], music = null, direction = null, bed = null, fxStem = null, stems = null }, total) {
   if (voice.length === 0 && sfx.length === 0 && !music) {
     await run(['-i', video, '-c', 'copy', '-movflags', '+faststart', out]).done;
     return null;
@@ -157,6 +160,8 @@ export async function muxAudio(video, out, { voice = [], sfx = [], music = null,
     parts.push('[room]');
   }
   const stem = fxStem && fx && voice.length ? [] : null;
+  // Every layer's parts, to split off into its own file.
+  const layers = stems ? { voice: [], music: [], effects: [] } : null;
   // Speech stays on top: music ducks hard under it, effects more gently, so a hit never masks a word.
   const keys = [music && vo ? 'voKeyM' : null, fx && vo ? 'voKeyF' : null].filter(Boolean);
   if (vo) {
@@ -178,14 +183,19 @@ export async function muxAudio(video, out, { voice = [], sfx = [], music = null,
     graph.push(`[${fx}][voKeyF]sidechaincompress=threshold=0.03:ratio=3:attack=10:release=250[fxduck]`);
     parts.push('[fxduck]');
   } else if (fx) parts.push(`[${fx}]`);
-  if (stem) {
-    // Each effects part feeds both the mix and the stem.
-    for (const p of parts.filter((x) => x === '[fxduck]' || x === '[room]')) {
-      const name = p.slice(1, -1);
-      graph.push(`${p}asplit=2[${name}m][${name}s]`);
-      parts[parts.indexOf(p)] = `[${name}m]`;
-      stem.push(`[${name}s]`);
-    }
+  // Each part feeds the mix, the effects stem the audit reads, and its layer's stem.
+  const layerOf = (p) => (p === '[voOut]' ? 'voice' : p === '[duck]' || p === '[bed]' ? 'music' : p === '[fxduck]' || p === '[room]' || p === `[${fx}]` ? 'effects' : null);
+  for (const p of [...parts]) {
+    const layer = layerOf(p);
+    const toStem = stem && layer === 'effects';
+    const toLayer = layers && layer;
+    if (!toStem && !toLayer) continue;
+    const name = p.slice(1, -1);
+    const outs = [`[${name}m]`, ...(toStem ? [`[${name}s]`] : []), ...(toLayer ? [`[${name}l]`] : [])];
+    graph.push(`${p}asplit=${outs.length}${outs.join('')}`);
+    parts[parts.indexOf(p)] = `[${name}m]`;
+    if (toStem) stem.push(`[${name}s]`);
+    if (toLayer) layers[layer].push(`[${name}l]`);
   }
   // The mix breathes in from silence and resolves out, instead of starting and stopping on a hard edge.
   const fadeIn = direction?.fadeIn ?? 0;
@@ -194,10 +204,19 @@ export async function muxAudio(video, out, { voice = [], sfx = [], music = null,
   graph.push(`${parts.join('')}amix=inputs=${parts.length}:normalize=0:duration=longest,atrim=0:${total.toFixed(3)}${edges.map((e) => `,${e}`).join('')}[aout]`);
   // The stem carries the same fades as the mix: an effect the fade swallows is judged as silent there too.
   if (stem) graph.push(`${stem.join('')}amix=inputs=${stem.length}:normalize=0:duration=longest,atrim=0:${total.toFixed(3)}${edges.map((e) => `,${e}`).join('')}[fxstem]`);
+  const layerOut = [];
+  if (layers) {
+    mkdirSync(stems, { recursive: true });
+    for (const [layer, labels] of Object.entries(layers)) {
+      if (!labels.length) continue;
+      graph.push(`${labels.join('')}amix=inputs=${labels.length}:normalize=0:duration=longest,atrim=0:${total.toFixed(3)}${edges.map((e) => `,${e}`).join('')}[stem_${layer}]`);
+      layerOut.push('-map', `[stem_${layer}]`, '-c:a', 'pcm_s16le', '-ar', '48000', join(stems, `${layer}.wav`));
+    }
+  }
   // Two-pass loudness: mix to a file, measure it, then apply one linear gain. One pass drifts on short clips.
   const mixed = `${out}.mix.wav`;
   const stemOut = stem ? ['-map', '[fxstem]', '-c:a', 'pcm_f32le', '-ar', '48000', fxStem] : [];
-  await run([...inputs, '-filter_complex', graph.join(';'), '-map', '[aout]', '-c:a', 'pcm_f32le', '-ar', '48000', mixed, ...stemOut]).done;
+  await run([...inputs, '-filter_complex', graph.join(';'), '-map', '[aout]', '-c:a', 'pcm_f32le', '-ar', '48000', mixed, ...stemOut, ...layerOut]).done;
   // Loudness gating skips silence, so sparse effects alone would be pushed as loud as speech. They get a lower target.
   const targetI = vo || music ? -14 : -18;
   // Effects alone peak no higher than -6 dBTP: sharp clicks near full scale are painful. Voice and music keep -1.5.

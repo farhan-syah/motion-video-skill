@@ -8,8 +8,10 @@ OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description
 ## How `speak` uses it
 
 1. **The voice:** with `--voice`, it designs a reference once by speaking the script's opening (25 words or more) and saves it as `<out>.voice.wav`. With `--reference`, the user's recording is the voice.
-2. **The narration:** each beat is one generation that clones that reference. A beat is the text between blank lines or `[pause]` marks, at most 40 words. Each generation is a separate draw of the voice, so fewer, longer ones keep it steady and the delivery connected.
-3. **The check:** every beat is heard back. A failing beat regenerates under a new seed, up to 3 tries, and the best take is kept. A beat that fails every take is spoken sentence by sentence.
+2. **The narration:** the whole script is one generation, one take, cloning that reference. Each generation is a separate draw of the voice, so one take keeps it the same person from start to end. A line with its own delivery note is its own short generation, a timed script keeps each line apart, and a script over 700 words splits at a sentence end. One generation can run to about 11 minutes of audio.
+3. **The shape:** the script's words are found in the take. Each sentence gets its own span, and the silence at each blank line and `[pause]` mark is set to its length.
+4. **The check:** the take is heard back as a whole. A failing take regenerates under a new seed, up to 3 tries, and the best is kept. A take that fails every try is spoken again by beats, then by sentences.
+5. **The polish** (`narration.md`, Voice polish) evens its pace and loudness and de-esses it.
 
 ## The voice
 
@@ -25,6 +27,7 @@ OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description
 - **Always design one.** Without `--voice` or `--reference`, the model picks its own voice.
 - **Listen to `<out>.voice.wav` first.** If it is wrong, change `--voice` or `--seed`. A new seed designs a new voice.
 - **Clone** with `--reference voice.wav`: 5 to 30 s of clean speech, only the user's voice or one they have consent for. Cloning is the sure way to a specific accent: a described voice drifts toward the model's most common accent.
+- **Hi-Fi cloning (`--hifi`):** clones from the reference and its exact transcript, which holds the voice closer to it. A designed voice keeps the words it was designed on, and a user's recording is transcribed with Whisper. VoxCPM2 ignores `--style` in this mode; a line's own delivery note still applies to that line.
 - **One voice holds:** every `speak` call with the same `--voice`, `--seed` and `--language` clones the same reference, so per-scene files match. `--reference <out>.voice.wav` gives another video the same voice.
 
 ## Delivery
@@ -34,7 +37,30 @@ OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description
 - **Delivery notes** open a line and replace `--style` for that line only, as its own generation, since an instruction covers everything a generation speaks: `(calm, curious tone, rising intonation) Where does the water go?`.
   - A question spoken in the beat's delivery reads as a statement. A note gives it its own intonation.
   - A short note that keeps one word of the base tone changes the line and holds the voice. A note without it swings the line far from the rest, and one appended to a long style is outweighed by it.
-- **How notes behave:** each note replaces the base delivery for its line, so many notes make the delivery swing from line to line. Energy words ("animated", "bright", "excited", "energetic") push the voice toward shouting. `--style` sets the base once for every line without a note.
+- **How notes behave:**
+  - A note is direction for one line: where its delivery should differ from the base, such as a question, a turn, a reveal or a close. Where and how often is the writer's call.
+  - Each noted line is its own generation, so each note is one more draw of the voice.
+  - A note describes delivery, never the voice. Words for pitch, age, gender or timbre ("low", "deep", "young", "husky") belong in `--voice`. In a note or `--style` they ask for a different speaker, and the line drifts from the reference.
+  - A note written as a way of speaking follows VoxCPM2's own guide: `(Speaking slowly with a whispering, mysterious tone)`.
+  - Tone and intonation notes change the line's melody. In one test, notes asking for slowness ("slower", "patient", "drawing the listener in") also added pauses inside the sentence.
+  - Energy words ("animated", "bright", "excited", "energetic") push the voice toward shouting. `--style` sets the base once for every line without a note.
+- **A directed script,** as one example of direction where the script turns, never a template. Narrative lines keep the base delivery, and a note marks the question, the reveal, the moment of wonder and the close:
+
+  ```text
+  (Asking warmly, with genuine curiosity, rising at the end) Ever wondered where honey actually comes from?
+
+  It starts with one bee… and one flower.
+  She drinks the nectar, stores it in a second stomach, and flies home.
+
+  (Speaking with a hint of a smile, like sharing a clever trick) Then comes the clever part. The bees fan their wings, hundreds of them at once, until most of the water is gone.
+
+  (calm, curious tone, rising intonation) And one bee, over her whole life?
+  (Speaking softly, with quiet wonder) She makes about a twelfth of a teaspoon.
+
+  (Speaking warmly, bringing it to a gentle close) So next time you open a jar… that's the work of thousands of bees.
+  ```
+
+- **Expression:** one `--style` over every line, with no notes or tags, gives an even read across the whole video. Emotion comes from notes where the feeling changes and tags where a person would make the sound. Contractions, questions and asides in the script change the read before any note does.
 - **Results vary between runs:** re-roll a line whose delivery misses (`--reroll`), up to 3 times.
 - **Non-verbal tags**, written where the sound happens: `[laughing]`, `[sigh]`, `[Uhm]`, `[Shh]`, `[Question-ah]`, `[Question-ei]`, `[Question-en]`, `[Question-oh]`, `[Surprise-wa]`, `[Surprise-yo]`, `[Dissatisfaction-hnn]`. VoxCPM2's guide advises using them sparingly, at most one per sentence, in lowercase where the tag has it.
 - Notes and tags are never shown in captions or checked.

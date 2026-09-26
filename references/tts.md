@@ -27,16 +27,16 @@ With no engine flag or config, `speak` picks the best engine this machine runs: 
 
 ## What each engine can do
 
-| Engine             | Voice                           | Delivery control                           | Pauses                                                 | Takes                                 |
-| ------------------ | ------------------------------- | ------------------------------------------ | ------------------------------------------------------ | ------------------------------------- |
-| VoxCPM2            | Described (`--voice`) or cloned | `--style`, delivery notes, non-verbal tags | Blank lines and marks exact, punctuation inside a beat | Per beat, cached, retried, `--reroll` |
-| Kokoro             | 28 named voices                 | `--speed` only                             | Every mark exact                                       | One pass, checked whole               |
-| Hugging Face model | The model's voice               | `--speed` only                             | Every mark exact                                       | One pass, checked whole               |
-| User's TTS         | Whatever the tool offers        | Whatever the tool offers                   | Every mark exact, or none with `--one-call`            | One pass, checked whole               |
+| Engine             | Voice                           | Delivery control                           | Pauses                                                       | Takes                                 |
+| ------------------ | ------------------------------- | ------------------------------------------ | ------------------------------------------------------------ | ------------------------------------- |
+| VoxCPM2            | Described (`--voice`) or cloned | `--style`, delivery notes, non-verbal tags | Blank lines and marks set after the take, punctuation inside | One take, cached, retried, `--reroll` |
+| Kokoro             | 28 named voices                 | `--speed` only                             | Every mark exact                                             | One pass, checked whole               |
+| Hugging Face model | The model's voice               | `--speed` only                             | Every mark exact                                             | One pass, checked whole               |
+| User's TTS         | Whatever the tool offers        | Whatever the tool offers                   | Every mark exact, or none with `--one-call`                  | One pass, checked whole               |
 
 A script feature an engine lacks is dropped for it, never spoken: delivery notes and tags are VoxCPM2 only.
 
-Every engine's output is de-essed: where an "s" rises above the voice's vowels, the 4.5–11 kHz band is turned down to 4 dB under them. The user's own recordings are never processed.
+Every engine's output gets the voice polish: pace and loudness evened sentence by sentence, and de-essing (`narration.md`, Voice polish). The user's own recordings are never processed.
 
 ## Steps for any engine
 
