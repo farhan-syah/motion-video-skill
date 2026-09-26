@@ -10,6 +10,10 @@ import { ManifestError, AUDIO_LEAD, loadManifest, pickScenes } from './lib/manif
 const HELP = `Usage: node video.mjs <command> [options]
 
 Commands:
+  version                        Print the skill's version (CHANGELOG.md lists what each version adds).
+  update [--check]               --check: ask the skill's git remote whether a newer version exists, and show what it
+                                 adds. Without --check: pull it and reinstall the dependencies. Only this command uses
+                                 the network for updates, and only when run.
   doctor [DIR]                   Sweep before directing: CPU, memory, GPU drawing and encoding, tools, speech runtime
                                  and models, the configured TTS, and the media and documents in DIR (default: here).
   init <dir>                     Create a project: direction.md, video.json, base.css, ui.css, world.css,
@@ -75,7 +79,7 @@ function num(flag, v, min) {
 }
 
 function parseArgs(argv) {
-  const opts = { manifest: 'video.json', scene: null, draft: false, force: false, scale: 1, jobs: null, start: null, name: null, subset: null, model: null, language: null, script: null, voice: null, speed: null, seed: null, reroll: null, out: null, command: null, engine: null, reference: null, device: null, fit: null, bbox: null, highlight: null, pin: [], route: [], layer: [], land: null, detail: null, size: null, countries: false, from: null, to: null, fps: null, width: null, rest: [] };
+  const opts = { manifest: 'video.json', scene: null, draft: false, force: false, scale: 1, jobs: null, start: null, name: null, subset: null, model: null, language: null, script: null, voice: null, speed: null, seed: null, reroll: null, check: false, out: null, command: null, engine: null, reference: null, device: null, fit: null, bbox: null, highlight: null, pin: [], route: [], layer: [], land: null, detail: null, size: null, countries: false, from: null, to: null, fps: null, width: null, rest: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--manifest') opts.manifest = argv[++i];
@@ -114,6 +118,7 @@ function parseArgs(argv) {
     else if (a === '--fps') opts.fps = num(a, argv[++i], 1);
     else if (a === '--width') opts.width = Math.floor(num(a, argv[++i], 16));
     else if (a === '-h' || a === '--help') opts.help = true;
+    else if (a === '--check') opts.check = true;
     else if (a.startsWith('--')) throw new ManifestError(`Unknown option ${a}.\n\n${HELP}`);
     else opts.rest.push(a);
   }
@@ -707,13 +712,13 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs }, op
   }
   rmSync(work, { recursive: true, force: true });
   console.log(`wrote ${output} (${total.toFixed(2)}s, ${Math.round(m.width * scale)}x${Math.round(m.height * scale)} @ ${m.fps}fps)`);
-  // A full render also writes a small copy for sharing, next to the master.
+  // A full render also writes a compressed copy next to the master, small enough for chat apps and social uploads.
   if (!draft && output === m.output) {
-    const { shareCopy } = await import('./lib/encode.mjs');
-    const share = output.replace(/(\.[^./]+)?$/, '-share.mp4');
-    await shareCopy(output, share);
+    const { compressedCopy } = await import('./lib/encode.mjs');
+    const small = output.replace(/(\.[^./]+)?$/, '-compressed.mp4');
+    await compressedCopy(output, small);
     const mb = (f) => (statSync(f).size / 1e6).toFixed(1);
-    console.log(`wrote ${share} (${mb(share)} MB, for sharing; master ${mb(output)} MB)`);
+    console.log(`wrote ${small} (${mb(small)} MB, compressed; master ${mb(output)} MB)`);
   }
 }
 
@@ -933,6 +938,19 @@ async function main() {
   const opts = parseArgs(argv);
   if (!cmd || opts.help || ['help', '--help', '-h'].includes(cmd)) {
     console.log(HELP);
+    return 0;
+  }
+  if (cmd === 'version' || cmd === '--version') {
+    const { version } = await import('./lib/update.mjs');
+    console.log(`motion-video ${version()}`);
+    return 0;
+  }
+  if (cmd === 'update') {
+    const { check, update } = await import('./lib/update.mjs');
+    const r = opts.check ? check() : update();
+    if (!r.available) console.log(`motion-video ${r.current} is the latest version (${r.branch}).`);
+    else if (!r.updated) console.log(`motion-video ${r.latest} is available (this is ${r.current}). Run "update" to install it.\n\n${r.notes || 'See CHANGELOG.md for what changed.'}`);
+    else console.log(`Updated motion-video ${r.current} -> ${r.latest}.\n\n${r.notes || 'See CHANGELOG.md for what changed.'}`);
     return 0;
   }
   if (cmd === 'doctor') {

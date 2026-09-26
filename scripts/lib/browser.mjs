@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -94,7 +94,8 @@ export async function renderer(browser) {
 }
 
 // Launches with the GPU when one works, else software rendering. MOTION_VIDEO_GPU=0 forces software.
-export async function launch() {
+// quiet: no line about the GPU (doctor reports it itself).
+export async function launch({ quiet = false } = {}) {
   const executablePath = systemBrowser() ?? undefined;
   const open = (extra) => chromium.launch({ executablePath, args: [...BASE_ARGS, ...extra] });
   try {
@@ -107,7 +108,7 @@ export async function launch() {
         const r = await renderer(b);
         gpuVerdict = !/swiftshader|llvmpipe|software|none/i.test(r);
         if (gpuVerdict) {
-          console.error(`drawing on GPU: ${r}`);
+          if (!quiet) console.error(`drawing on GPU: ${r}`);
           return b;
         }
         await b.close();
@@ -116,7 +117,8 @@ export async function launch() {
     return await open([]);
   } catch (e) {
     const dir = fileURLToPath(new URL('..', import.meta.url));
-    throw new Error(`Chromium failed to launch (${executablePath ?? 'Playwright bundled build'}): ${e.message.split('\n')[0]}. Install chromium, set MOTION_VIDEO_CHROME to a Chrome binary, or run: cd ${dir} && bunx playwright install chromium-headless-shell`);
+    const bun = spawnSync('bun', ['--version'], { stdio: 'ignore' }).status === 0;
+    throw new Error(`Chromium failed to launch (${executablePath ?? 'Playwright bundled build'}): ${e.message.split('\n')[0]}. Install Chrome or Chromium, set MOTION_VIDEO_CHROME to a Chrome binary, or run: cd ${dir} && ${bun ? 'bunx' : 'npx'} playwright install chromium-headless-shell`);
   }
 }
 

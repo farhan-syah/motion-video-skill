@@ -330,10 +330,10 @@ export async function tileImages(pngs, out, { cols = 4, width = 480 } = {}) {
   await done;
 }
 
-// A copy sized for sharing (chat apps, social uploads): the same picture and audio in a slow x264 encode. NVENC at
+// A compressed copy for chat apps and social uploads: the same picture and audio in a slow x264 encode. NVENC at
 // its master quality spends several times the bits a flat motion-graphics frame needs. Measured on a 65 s promo:
-// 36.2 MB master, 9.4 MB share copy at SSIM 0.997.
-export async function shareCopy(video, out) {
+// 36.2 MB master, 9.4 MB compressed copy at SSIM 0.997.
+export async function compressedCopy(video, out) {
   await run(['-i', video, '-map', '0', '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-maxrate', '6000k', '-bufsize', '12000k', '-tune', 'animation', '-pix_fmt', 'yuv420p', ...BT709, '-c:a', 'copy', '-movflags', '+faststart', out]).done;
 }
 

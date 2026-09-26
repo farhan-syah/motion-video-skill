@@ -27,6 +27,22 @@ Give your AI agent the URL of this repository and ask it to install the skill:
 
 The agent clones the repo into the folder where it loads skills, as `motion-video/`, then installs the dependencies.
 
+**For the agent doing the install:**
+
+1. **Clone:** `git clone https://github.com/farhan-syah/motion-video-skill <skills-folder>/motion-video`. Use the folder your tool loads skills from. With none, any folder the user picks.
+2. **Install:** `cd <skills-folder>/motion-video/scripts && bun install`, or `npm install` without Bun.
+3. **Check:** `node scripts/video.mjs doctor` in the user's folder. It prints the skill version and what the machine offers: ffmpeg, Chromium, GPU, speech engines and models. Fix what it marks missing, or tell the user what is missing.
+4. **Speech (optional):** the first `speak` or `transcribe` installs the local speech runtime and downloads its models once. `~/.config/motion-video/config.json` can point `"models"` at a folder the user keeps.
+5. **Report:** tell the user the version installed and anything `doctor` found missing.
+
+## Versions and updates
+
+- **Installed version:** `node scripts/video.mjs version`. `doctor` prints it too. `CHANGELOG.md` lists what each version adds.
+- **When to check:** when the user asks, or when `doctor` says a check is due (none yet, or the last one over 30 days ago). Nothing checks on its own. The skill never uses the network for this unasked.
+- **Check:** `node scripts/video.mjs update --check` fetches the repo and shows what a newer version adds.
+- **Update:** with the user's consent, `node scripts/video.mjs update`. It pulls the latest version and reinstalls the dependencies. It stops, changing nothing, on local edits to the skill or a branch other than `main`, and says what to do.
+- **Not a git clone:** replace the folder with a fresh clone, then run the install step again.
+
 **Manual install:**
 
 1. Clone this repo into your agent's skills folder: `git clone https://github.com/farhan-syah/motion-video-skill motion-video`.
@@ -53,7 +69,7 @@ Ask for a video in plain words. The agent follows `SKILL.md`:
 6. **Check:** it lints each scene for text size, contrast, reading time, overlap and safe area, and reviews still frames.
 7. **Render:** it captures every frame, mixes the sound, audits sound sync and loudness, and writes a contact sheet.
 
-The project folder holds everything: `direction.md`, `scenes/`, `video.json`, and the output: `out/video.mp4` (master) and `out/video-share.mp4` (a copy about a quarter the size, for chat apps and social uploads).
+The project folder holds everything: `direction.md`, `scenes/`, `video.json`, and the output: `out/video.mp4` (master) and `out/video-compressed.mp4` (a copy about a quarter the size, for chat apps and social uploads).
 
 **Sound:** no music is ever added unless you supply it. Without music, the video gets motion sound effects: each effect is bound to the element whose motion makes it.
 
@@ -67,31 +83,31 @@ The project folder holds everything: `direction.md`, `scenes/`, `video.json`, an
 
 The agent runs `node scripts/video.mjs <command>` from the project folder. You can run it too.
 
-| Command                   | Does                                                                |
-| ------------------------- | ------------------------------------------------------------------- |
-| `doctor`                  | Sweeps the machine, speech engines and your files before directing |
-| `init <dir>`              | Creates a project from the templates                                |
-| `check [--scene N]`       | Lints scenes. With `--scene`, also writes that scene's still sheet. |
-| `still [--scene N] [T…]`  | Writes frames or contact sheets                                     |
-| `render [--draft]`        | Renders, writes a small share copy, audits the sound, and writes `out/sheet.png` |
-| `font "Family"`           | Fetches a font into the project                                     |
-| `lib gsap\|three\|lottie` | Copies a browser library into the project                           |
-| `footage FILE`            | Extracts a clip into frames for a scene                             |
-| `beats [FILE]`            | Analyzes music for beat-synced cuts                                 |
+| Command                   | Does                                                                                                                                |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `doctor`                  | Sweeps the machine, speech engines and your files before directing                                                                  |
+| `init <dir>`              | Creates a project from the templates                                                                                                |
+| `check [--scene N]`       | Lints scenes. With `--scene`, also writes that scene's still sheet.                                                                 |
+| `still [--scene N] [T…]`  | Writes frames or contact sheets                                                                                                     |
+| `render [--draft]`        | Renders, writes a compressed copy, audits the sound, and writes `out/sheet.png`                                                     |
+| `font "Family"`           | Fetches a font into the project                                                                                                     |
+| `lib gsap\|three\|lottie` | Copies a browser library into the project                                                                                           |
+| `footage FILE`            | Extracts a clip into frames for a scene                                                                                             |
+| `beats [FILE]`            | Analyzes music for beat-synced cuts                                                                                                 |
 | `speak FILE`              | Makes a narration from a script: local Kokoro (English), VoxCPM2 (30 languages), any transformers.js voice, or your own TTS command |
-| `transcribe`              | Times every word of a voiceover or TTS file, locally, so the picture follows the speech |
-| `map --out SVG …`         | Draws a map (countries, pins, routes) from Natural Earth data |
+| `transcribe`              | Times every word of a voiceover or TTS file, locally, so the picture follows the speech                                             |
+| `map --out SVG …`         | Draws a map (countries, pins, routes) from Natural Earth data                                                                       |
 
 Every command and `video.json` field: `references/cli.md`.
 
 **Environment:**
 
-| Variable                 | Effect                                                        |
-| ------------------------ | ------------------------------------------------------------- |
-| `MOTION_VIDEO_CHROME`    | Path to the Chrome binary to use                              |
-| `MOTION_VIDEO_GPU=0`     | Draws in software                                             |
-| `MOTION_VIDEO_NVENC=0`   | Encodes with libx264                                          |
-| `MOTION_VIDEO_LEAD_LOSS` | dB the limiter may take from the loudest moment (default 1.5) |
+| Variable                 | Effect                                                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `MOTION_VIDEO_CHROME`    | Path to the Chrome binary to use                                                                          |
+| `MOTION_VIDEO_GPU=0`     | Draws in software                                                                                         |
+| `MOTION_VIDEO_NVENC=0`   | Encodes with libx264                                                                                      |
+| `MOTION_VIDEO_LEAD_LOSS` | dB the limiter may take from the loudest moment (default 1.5)                                             |
 | `MOTION_VIDEO_MODELS`    | Folder for downloaded speech models. Also settable as `"models"` in `~/.config/motion-video/config.json`. |
 
 ## Repository layout
@@ -99,12 +115,15 @@ Every command and `video.json` field: `references/cli.md`.
 | Path           | Contents                                                                                         |
 | -------------- | ------------------------------------------------------------------------------------------------ |
 | `SKILL.md`     | The workflow the agent follows                                                                   |
+| `CHANGELOG.md` | What each version adds                                                                           |
 | `references/`  | Direction, concepts, building, craft thresholds, styles, CLI, icon index                         |
 | `templates/`   | What `init` copies into a project: CSS kit, runtime, fonts, icons, scene and direction templates |
 | `scripts/`     | The CLI, renderer, linter, sound synthesis and audit                                             |
 | `scripts/dev/` | Tools for editing the sound catalog                                                              |
 
 ## Development
+
+See `CONTRIBUTING.md` for what the skill accepts and how to send a change.
 
 - **Tests:** `node --test scripts/lib/`
 - **Sound catalog review:** `node scripts/dev/render-sounds.mjs <dir>`, then `uv run scripts/dev/sound-review.py <dir>`
