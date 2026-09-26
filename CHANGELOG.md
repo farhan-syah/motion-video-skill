@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - `doctor` says when a sandbox may hide the browser and the GPU.
+- The sound intent error names the intents the sound fits and the sounds that fit the intent.
 
 ### Changed
 

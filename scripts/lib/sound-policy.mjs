@@ -15,7 +15,9 @@ export function cueSoundErrors(cues, timeOf) {
     if (!cue.intent) {
       errors.push({ index: i, message: `${cue.target} needs data-sfx-intent for "${cue.sound}". Name its visible action, or mark its material.` });
     } else if (!meta.intents.includes(cue.intent)) {
-      errors.push({ index: i, message: `"${cue.sound}" on ${cue.target} does not match intent "${cue.intent}". Use a sound whose intent matches the visible action.` });
+      // Name both ways out: the intents this sound carries, and the sounds that carry the intent asked for.
+      const fits = Object.entries(SOUND_META).filter(([, m]) => m.intents.includes(cue.intent)).map(([name]) => name);
+      errors.push({ index: i, message: `"${cue.sound}" on ${cue.target} does not match intent "${cue.intent}". "${cue.sound}" fits: ${meta.intents.join(', ')}.${fits.length ? ` Sounds for "${cue.intent}": ${fits.join(', ')}.` : ` No sound carries "${cue.intent}".`} Use a sound whose intent matches the visible action.` });
     }
     // A struck material (wood, glass, ...) only recolors a sound. Paper is a material that is also a sound.
     if (cue.material && cue.materialBinds !== false && !MATERIALS[cue.material] && !meta.intents.includes(cue.material)) {
