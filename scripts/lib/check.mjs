@@ -20,6 +20,11 @@ const SMALL_GRACE = 600; // Text may pass below MIN_TEXT this long (ms) during a
 // Runs in the page. Returns every visible run of text with its box, effective opacity and size.
 function collectText(short) {
   const out = [];
+  // Hit testing skips pointer-events: none (a caption track, an overlay), which would make whatever lies under that
+  // text read as covering it. Every element takes part in hit testing while the text is measured.
+  const hitAll = document.createElement('style');
+  hitAll.textContent = '* { pointer-events: auto !important; }';
+  document.head.append(hitAll);
   const vw = innerWidth;
   const vh = innerHeight;
   const label = (el) => {
@@ -63,6 +68,14 @@ function collectText(short) {
     return m;
   };
   const overlapOk = (el) => !!el.closest('[data-overlap-ok]');
+  // The screen box an inset() clip leaves visible: inset(top right bottom left), in px or % of the element's box.
+  const insetRect = (e, clipPath) => {
+    const r = e.getBoundingClientRect();
+    const v = clipPath.slice(6).split(/\s+round\s+|\)/)[0].trim().split(/\s+/);
+    const [t, rt = t, b = t, l = rt] = v;
+    const px = (s, size) => (s.endsWith('%') ? (parseFloat(s) / 100) * size : parseFloat(s) || 0);
+    return { left: r.left + px(l, r.width), top: r.top + px(t, r.height), right: r.right - px(rt, r.width), bottom: r.bottom - px(b, r.height) };
+  };
   // Opaque content painted above the text at a point: anything but the text's own subtree and ancestors.
   const coveredAt = (el, x, y) => {
     for (const top of document.elementsFromPoint(x, y)) {
@@ -89,10 +102,10 @@ function collectText(short) {
       const cs = getComputedStyle(e);
       if (cs.display === 'none' || cs.visibility === 'hidden') hidden = true;
       mat = own(cs).multiply(mat);
-      if (e !== el && (cs.overflowX !== 'visible' || cs.overflowY !== 'visible' || cs.clipPath !== 'none')) {
-        const r = e.getBoundingClientRect();
-        clip = { l: Math.max(clip.l, r.left), t: Math.max(clip.t, r.top), r: Math.min(clip.r, r.right), b: Math.min(clip.b, r.bottom) };
-      }
+      // An inset clip (a wipe entrance or exit) hides part of the box, on the text itself or on any ancestor.
+      const inset = /^inset\(/.test(cs.clipPath) ? insetRect(e, cs.clipPath) : null;
+      const r = inset ?? (e !== el && (cs.overflowX !== 'visible' || cs.overflowY !== 'visible' || cs.clipPath !== 'none') ? e.getBoundingClientRect() : null);
+      if (r) clip = { l: Math.max(clip.l, r.left), t: Math.max(clip.t, r.top), r: Math.min(clip.r, r.right), b: Math.min(clip.b, r.bottom) };
     }
     const opacity = effOpacity(el);
     if (hidden || opacity < 0.02) continue;
@@ -143,7 +156,9 @@ function collectText(short) {
       probe = { l: Math.max(box.l, r.left), t: Math.max(box.t, r.top), r: Math.min(box.r, r.right), b: Math.min(box.b, r.bottom) };
     }
     if (opacity >= 0.5 && probe.r - probe.l >= 1 && probe.b - probe.t >= 1) {
-      for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.35], [0.75, 0.35], [0.25, 0.65], [0.75, 0.65]]) {
+      // 15 probes across the glyph box: a dot grid or a card over part of a label hides it, though most probes of a
+      // sparse grid would miss. Three covered probes (a fifth of the text) count as covered.
+      for (const [fx, fy] of [0.1, 0.3, 0.5, 0.7, 0.9].flatMap((x) => [0.3, 0.5, 0.7].map((y) => [x, y]))) {
         const hit = coveredAt(el, probe.l + (probe.r - probe.l) * fx, probe.t + (probe.b - probe.t) * fy);
         if (hit && world && hit.closest('.hud')) underHud++;
         else if (hit) {
@@ -152,8 +167,23 @@ function collectText(short) {
         }
       }
     }
+    // A solid plate behind the text (a pill, a card, a button) is its background: the pixels around the glyph box
+    // can lie outside the plate. The nearest painted ancestor counts when it is opaque, flat and covers the text.
+    let plate = null;
+    for (let e = el; e && e !== document.body; e = e.parentElement) {
+      const es = getComputedStyle(e);
+      const bg = es.backgroundColor.match(/[\d.]+/g)?.map(Number);
+      if (es.backgroundImage !== 'none') break;
+      if (!bg || (bg.length > 3 && bg[3] === 0)) continue;
+      const r = e.getBoundingClientRect();
+      // The plate is the text's own element or an ancestor, so it fades with the text: their contrast holds through a
+      // fade-in (a caption line's pop), and only the plate's own color alpha matters.
+      if ((bg.length < 4 || bg[3] >= 0.95) && r.left <= full.l + 1 && r.right >= full.r - 1 && r.top <= full.t + 1 && r.bottom >= full.b - 1) plate = es.backgroundColor;
+      break;
+    }
     const text = texts.map((t) => t.textContent).join(' ').replace(/\s+/g, ' ').trim();
     out.push({
+      plate,
       id: idx,
       label: label(el),
       text: text.length > 40 ? `${text.slice(0, 40)}…` : text,
@@ -165,14 +195,18 @@ function collectText(short) {
       overlapOk: overlapOk(el),
       // UI texture: small real UI inside a device, read through a callout, headline or caption instead.
       texture: !!el.closest('[data-texture]'),
+      // A caption line is timed by the speech it shows, not by reading speed.
+      caption: !!el.closest('[data-captions]'),
       world,
       hud,
-      underHud: underHud >= 3,
+      underHud: underHud >= 8,
       occluded: covered >= 3 && !overlapOk(el) ? coverer : null,
       px: (parseFloat(cs.fontSize) * sy) / short,
       // Screen scale of the text from its transform chain: above 1 means a camera push or zoom enlarges it.
       scale: sy,
       color: cs.color,
+      // An outline stroke (a caption over footage) carries the contrast when the fill alone does not.
+      stroke: parseFloat(cs.webkitTextStrokeWidth) * sy >= 1 ? cs.webkitTextStrokeColor : null,
       clipText: cs.backgroundClip === 'text' || cs.webkitBackgroundClip === 'text',
       family: cs.fontFamily.split(',')[0].trim().replace(/^["']|["']$/g, ''),
       overflow: el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1 ? ['hidden', 'clip', 'scroll', 'auto'].includes(cs.overflowX) || ['hidden', 'clip', 'scroll', 'auto'].includes(cs.overflowY) : false,
@@ -183,6 +217,7 @@ function collectText(short) {
       })(),
     });
   }
+  hitAll.remove();
   return out;
 }
 
@@ -200,11 +235,14 @@ function describeAnimations() {
     // (a -50% centering), the motion swings through that offset, so the element jumps sideways during it.
     let ownTranslate = null;
     if (el && ['rise', 'drop', 'left', 'right', 'reveal', 'sink-out', 'rise-out'].includes(a.animationName)) {
-      const at = a.currentTime;
-      a.cancel();
+      // Every animation on the element is lifted, not only this one: an entrance and an exit both move translate.
+      const own = el.getAnimations().map((x) => [x, x.currentTime]);
+      for (const [x] of own) x.cancel();
       const base = getComputedStyle(el).translate;
-      a.currentTime = at;
-      a.pause();
+      for (const [x, at] of own) {
+        x.currentTime = at;
+        x.pause();
+      }
       if (base && base !== 'none' && !/^0px( 0px)?( 0px)?$/.test(base)) ownTranslate = base;
     }
     return {
@@ -250,6 +288,27 @@ function openingCoverage() {
   for (const el of document.body.querySelectorAll('*')) {
     const r = el.getBoundingClientRect();
     if (r.width < 1 || r.height < 1 || r.right <= 0 || r.bottom <= 0 || r.left >= vw || r.top >= vh) continue;
+    // A filled SVG shape (a map's land, an illustration) counts where it is painted, tested per cell, since its
+    // box can span the frame while the shape covers only part of it.
+    if (el instanceof SVGGeometryElement) {
+      const s = getComputedStyle(el);
+      if (s.fill === 'none' || Number(s.fillOpacity) * opacityOf(el) < 0.5) continue;
+      // A pattern fill or a frame-sized rect is a backdrop layer, present in an empty frame too.
+      if (/^url\(/.test(s.fill) || (el.localName === 'rect' && r.width * r.height > vw * vh * 0.6)) continue;
+      const inv = el.getScreenCTM()?.inverse();
+      if (!inv) continue;
+      const svg = el.ownerSVGElement;
+      const p = svg.createSVGPoint();
+      for (let y = Math.max(0, Math.floor((r.top / vh) * H)); y < Math.min(H, Math.ceil((r.bottom / vh) * H)); y++) {
+        for (let x = Math.max(0, Math.floor((r.left / vw) * W)); x < Math.min(W, Math.ceil((r.right / vw) * W)); x++) {
+          if (cells[y * W + x]) continue;
+          p.x = ((x + 0.5) / W) * vw;
+          p.y = ((y + 0.5) / H) * vh;
+          if (el.isPointInFill(p.matrixTransform(inv))) cells[y * W + x] = 1;
+        }
+      }
+      continue;
+    }
     if (r.width * r.height > vw * vh * 0.6) continue;
     const s = getComputedStyle(el);
     const filled = (s.backgroundColor !== 'transparent' && !/rgba\([^)]*,\s*0\)/.test(s.backgroundColor)) || s.backgroundImage !== 'none';
@@ -412,7 +471,7 @@ export async function checkScene(browser, m, scene, carry = null) {
     if (!anims.length && !seekable) add('warn', null, 'Scene has no animation. A static frame reads as a frozen video.', 'Add entrance motion and slow ambient drift.');
     const starts = new Map();
     for (const a of anims) {
-      if (a.ownTranslate) add('error', a.delay, `"${a.name}" on ${a.target} animates translate, but the element is placed with its own translate (${a.ownTranslate}). The animation swings through that offset, so the element jumps during it.`, 'Place the element with left/top, inset or grid, or wrap it: put the translate on a still wrapper and the .m on the inner element.');
+      if (a.ownTranslate) add('error', a.delay, `"${a.name}" on ${a.target} animates translate, but the element is placed with its own translate (${a.ownTranslate}). The animation swings through that offset, so the element jumps during it.`, 'Center it with transform: translate(-50%, -50%) instead of the translate property (the two compose), or place it with left/top, inset or grid.');
       if (a.flattens3d) add('error', a.delay, `"${a.name}" on ${a.target} animates opacity or filter around 3D props, which flattens them for the rest of the scene.`, 'Use a transform-only entrance on 3D props: pop-in, drop-in, grow-x or grow-y.');
       if (a.kind === 'CSSTransition') add('error', null, `CSS transition on ${a.target}. Transitions start on real time and cannot be seeked reliably.`, 'Replace the transition with @keyframes and animation-delay.');
       const finite = Number.isFinite(a.iterations) && Number.isFinite(a.duration);
@@ -478,6 +537,11 @@ export async function checkScene(browser, m, scene, carry = null) {
           s.firstSolid ??= t;
           s.lastSolid = t;
         }
+        // Fully opaque: contrast is measured here, once a fade-in (a caption line's pop) has finished.
+        if (it.opacity >= 0.99) {
+          s.firstFull ??= t;
+          s.lastFull = t;
+        }
         if (it.overflow && !reported.has(`o${it.id}`)) {
           reported.add(`o${it.id}`);
           add('error', t, `Text overflows its box and is clipped: ${it.label} "${it.text}".`, 'Shorten the text, widen the box, or lower the size one step on the type scale.');
@@ -535,7 +599,7 @@ export async function checkScene(browser, m, scene, carry = null) {
       const need = Math.max(READ_MIN, it.words / READ_WPS) * 1000;
       // Text carried across a match cut keeps the reading time it already had at the end of the previous scene.
       const carried = s.firstSolid != null && s.firstSolid <= 2 * step ? (carry?.get(it.text) ?? 0) : 0;
-      if (!it.texture && s.visible > 0 && s.visible + carried + step < need) {
+      if (!it.texture && !it.caption && s.visible > 0 && s.visible + carried + step < need) {
         add('warn', s.firstSolid, `"${it.text}" is readable for ${fmt(s.visible)}. ${it.words} words need ${fmt(need)}.`, 'Hold it longer, or cut words.');
         // Kept so a parallel check can credit the reading time a match cut carries in from the previous scene.
         findings[findings.length - 1].read = { text: it.text, visible: s.visible, need, step, atStart: s.firstSolid != null && s.firstSolid <= 2 * step };
@@ -545,26 +609,94 @@ export async function checkScene(browser, m, scene, carry = null) {
     // Text still readable on the last sampled frame carries into the next scene's reading time.
     findings.carry = new Map([...seen.values()].filter((s) => s.lastSolid != null && s.lastSolid >= dur - 2 * step).map((s) => [s.it.text, s.visible]));
 
-    // Contrast, measured on the rendered frame where each text first sits fully opaque.
+    // Narration sync: text marked data-say must be on screen while its words are spoken.
+    const says = await sc.page.evaluate(() => [...document.querySelectorAll('[data-say]')].map((el, i) => {
+      el.dataset.sayId = String(i);
+      return { id: i, phrase: el.dataset.say || el.textContent.trim().replace(/\s+/g, ' ') };
+    }));
+    if (says.length) {
+      const { spokenWords, findPhrase } = await import('./voice.mjs');
+      const { words, missing } = spokenWords(m);
+      if (!words.length) {
+        add('error', null, `${says.length} element(s) carry data-say, but no narration is transcribed${missing.length ? ` (${missing.map((n) => n.where).join(', ')})` : ''}.`, missing.length ? 'Run transcribe, then check again.' : 'Set "voiceover" or a scene "audio" in video.json, or remove data-say.');
+      } else {
+        const T = 0.15;
+        for (const say of says) {
+          const hit = findPhrase(words, say.phrase, scene.start);
+          if (!hit) {
+            add('warn', null, `data-say "${say.phrase}" is not in the narration transcript.`, 'Match the spoken words, or set data-say to the exact phrase that is spoken.');
+            continue;
+          }
+          const a = hit.start - scene.start;
+          const b = hit.end - scene.start;
+          if (b < 0 || a > dur / 1000) {
+            add('error', null, `"${say.phrase}" is spoken at ${hit.start.toFixed(2)}s, outside this scene (${scene.start.toFixed(2)}-${(scene.start + dur / 1000).toFixed(2)}s).`, 'Move the text to the scene where it is spoken, or retime the scenes.');
+            continue;
+          }
+          // When the text is visible, stepped every 50 ms from 1 s before the words to their end.
+          let first = null;
+          let last = null;
+          for (let t = Math.max(0, a - 1); t <= Math.min(b, dur / 1000); t += 0.05) {
+            await sc.seek(t * 1000);
+            const shown = await sc.page.evaluate((id) => {
+              const el = document.querySelector(`[data-say-id="${id}"]`);
+              let o = 1;
+              for (let e = el; e; e = e.parentElement) o *= Number(getComputedStyle(e).opacity);
+              const r = el.getBoundingClientRect();
+              return o >= 0.5 && r.width > 0 && r.right > 0 && r.bottom > 0 && r.left < innerWidth && r.top < innerHeight;
+            }, say.id);
+            if (shown) {
+              first ??= t;
+              last = t;
+            }
+          }
+          const at = (x) => `${(scene.start + x).toFixed(2)}s`;
+          if (first == null) {
+            // Where it does appear, if at all, so the fix names a time.
+            let later = null;
+            for (let t = b; t <= dur / 1000 && later == null; t += 0.1) {
+              await sc.seek(t * 1000);
+              if (await sc.page.evaluate((id) => {
+                const el = document.querySelector(`[data-say-id="${id}"]`);
+                let o = 1;
+                for (let e = el; e; e = e.parentElement) o *= Number(getComputedStyle(e).opacity);
+                return o >= 0.5;
+              }, say.id)) later = t;
+            }
+            add('error', a * 1000, `"${say.phrase}" is spoken ${at(Math.max(0, a))}-${at(b)}, but never on screen then${later != null ? `: it appears at ${at(later)}` : ''}.`, `Bring it on screen by the first word: set its --t to about ${(a - 0.2).toFixed(2)}s.`);
+          }
+          else {
+            if (first - a > T) add('warn', first * 1000, `"${say.phrase}" appears ${(first - a).toFixed(2)}s after it is spoken (words start at ${at(a)}).`, `Start its entrance by ${at(a)}: set its --t to about ${(a - 0.2).toFixed(2)}s.`);
+            if (b - last > T + 0.05) add('warn', last * 1000, `"${say.phrase}" leaves ${(b - last).toFixed(2)}s before its words end (at ${at(b)}).`, 'Hold it until the last word ends.');
+          }
+        }
+      }
+    }
+
+    // Contrast, measured on the rendered frame where each text first sits fully opaque, in the colors it has on that
+    // frame (a caption word changes color while it is spoken).
     const byTime = new Map();
     for (const s of seen.values()) {
       if (s.firstSolid == null || s.it.clipText || s.it.texture) continue;
-      const color = parseRgb(s.it.color);
-      if (!color || color.a < 1) continue;
-      const t = Math.min(s.lastSolid, s.firstSolid + 500);
+      const t = s.firstFull != null ? Math.min(s.lastFull, s.firstFull + 500) : Math.min(s.lastSolid, s.firstSolid + 500);
       const list = byTime.get(t) ?? [];
-      list.push({ s, color });
+      list.push({ s });
       byTime.set(t, list);
     }
     for (const [t, list] of byTime) {
       await sc.seek(t);
       const items = await sc.page.evaluate(collectText, short);
       const png = await sc.capture('png');
-      const live = list.map(({ s, color }) => ({ s, color, it: items.find((x) => x.id === s.it.id) })).filter((x) => x.it);
+      const live = list
+        .map(({ s }) => ({ s, it: items.find((x) => x.id === s.it.id) }))
+        .map((x) => ({ ...x, color: x.it && parseRgb(x.it.color) }))
+        .filter((x) => x.it && x.color && x.color.a >= 1);
       const bgs = await ringLuminance(decoder, png, live.map((x) => x.it.full));
       live.forEach(({ it, color }, i) => {
-        if (bgs[i] == null) return;
-        const r = ratio(lum(color.rgb), bgs[i]);
+        const bg = it.plate ? lum(parseRgb(it.plate).rgb) : bgs[i];
+        if (bg == null) return;
+        const stroke = it.stroke && parseRgb(it.stroke);
+        const r = Math.max(ratio(lum(color.rgb), bg), stroke && stroke.a >= 1 ? ratio(lum(stroke.rgb), bg) : 0);
         const min = it.px >= LARGE_TEXT ? CONTRAST_LARGE : CONTRAST_BODY;
         if (r < min) add('error', t, `Contrast ${r.toFixed(2)}:1 is below ${min}:1 for "${it.text}".`, 'Darken the background behind it or change the text color token.');
       });
@@ -577,6 +709,26 @@ export async function checkScene(browser, m, scene, carry = null) {
     }
     for (const c of sounding) {
       if (c.subs?.length > 8 && !c.accentCap) add('warn', c.at, `data-sfx "${c.sound}" on ${c.target} would sound ${c.subs.length} accents.`, 'Cap it with data-sfx-accents="3" or "4".');
+    }
+
+    // Under narration the voice leads. An effect on top of a word competes with it and distracts: it belongs in a
+    // pause, and only where the picture needs a sound the voice does not give. Two effects a scene at most.
+    if (m.voiceover || m.scenes.some((s) => s.audio)) {
+      const { spokenWords } = await import('./voice.mjs');
+      const { words } = spokenWords(m);
+      if (words.length) {
+        if (sounding.length > 2) add('warn', null, `${sounding.length} sound cues under narration in one scene (${sounding.map((c) => c.sound).join(', ')}). Under a voice, effects distract: keep at most 2, each with a clear reason.`, 'Keep the one or two that mark what the voice does not say (a transition, the payoff), and drop the rest.');
+        for (const c of sounding) {
+          const t = scene.start + c.at / 1000;
+          // The hit (its first 120 ms) must clear the words. A ring-out that fades under the next word is fine.
+          const over = words.find((w) => w.start < t + 0.12 && w.end > t);
+          if (!over) continue;
+          // The next pause of 0.3 s or more after the cue, where the effect could sit.
+          let gap = null;
+          for (let i = words.indexOf(over); i < words.length - 1 && gap == null; i++) if (words[i + 1].start - words[i].end >= 0.3) gap = words[i].end;
+          add('warn', c.at, `data-sfx "${c.sound}" on ${c.target} plays over the narration ("${over.text}" at ${over.start.toFixed(2)}s).`, `Move its moment into a pause${gap != null ? ` (the next starts at ${gap.toFixed(2)}s)` : ''}, or drop it if the voice already carries the moment.`);
+        }
+      }
     }
 
     // An opening frame with only a headline (or nothing) reads as a dead cut. The motif should be on screen by 0.4 s.

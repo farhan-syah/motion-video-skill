@@ -26,7 +26,9 @@ export function probeDuration(file) {
   return d;
 }
 
-export function loadManifest(manifestPath) {
+// voiceoverFits: false lets a voiceover run past the video's end (transcribe needs the new words to size the scenes).
+// The overrun is then reported in `voiceoverOverrun` (seconds) instead of failing.
+export function loadManifest(manifestPath, { voiceoverFits = true } = {}) {
   const path = resolve(manifestPath);
   if (!existsSync(path)) throw new ManifestError(`${path} not found. Run "init <dir>" or pass the manifest path.`);
   let raw;
@@ -69,6 +71,11 @@ export function loadManifest(manifestPath) {
       if (!existsSync(audio)) fail(path, `${where}.audio ${audio} does not exist.`);
       audioDuration = probeDuration(audio);
     }
+    let script = null;
+    if (s.script != null) {
+      script = resolve(root, s.script);
+      if (!existsSync(script)) fail(path, `${where}.script ${script} does not exist.`);
+    }
     if (s.duration != null && s.bars != null) fail(path, `${where} sets both "duration" and "bars". Keep one.`);
     let duration = s.bars != null ? s.bars * bar : s.duration;
     if (s.bars != null && (typeof s.bars !== 'number' || s.bars <= 0)) fail(path, `${where}.bars must be a positive number.`);
@@ -106,7 +113,7 @@ export function loadManifest(manifestPath) {
     for (const [k, lo, hi] of [['inVol', 0, 4], ['inDur', 0.2, 4]]) {
       if (s[k] != null && (typeof s[k] !== 'number' || s[k] < lo || s[k] > hi)) fail(path, `${where}.${k} is ${s[k]}. Use a number from ${lo} to ${hi}.`);
     }
-    return { name, index: i + 1, file, missing: !existsSync(file), duration, audio, audioDuration, energy, curve, in: s.in ?? null, inVol: s.inVol, inDur: s.inDur };
+    return { name, index: i + 1, file, missing: !existsSync(file), duration, audio, audioDuration, script, energy, curve, in: s.in ?? null, inVol: s.inVol, inDur: s.inDur };
   });
 
   // Frame boundaries round the cumulative time, so per-scene rounding never drifts the total.
@@ -131,8 +138,32 @@ export function loadManifest(manifestPath) {
     music = { file, volume, start };
   }
 
+  // One narration for the whole video (a TTS file, a recording, or a video file's sound): "voiceover": "vo.wav" or
+  // { "file": "vo.wav", "start": 0.5, "script": "vo.txt" }, start in video seconds, script as text or subtitles. Per-scene "audio" stays for narration cut per scene.
+  let voiceover = null;
+  let voiceoverOverrun = 0;
+  if (raw.voiceover != null) {
+    const spec = typeof raw.voiceover === 'string' ? { file: raw.voiceover } : raw.voiceover;
+    const file = resolve(root, spec.file ?? '');
+    if (!spec.file || !existsSync(file)) fail(path, `"voiceover" file ${file} does not exist.`);
+    const at = spec.start ?? 0;
+    // A negative start skips the file's first seconds (a count-in, dead air before the first word).
+    if (typeof at !== 'number' || !Number.isFinite(at)) fail(path, `"voiceover.start" is ${JSON.stringify(at)}. Use video seconds: 0.5 starts it half a second in, -2 skips its first 2 seconds.`);
+    const duration = probeDuration(file);
+    const total = Math.round(start * fps) / fps;
+    if (at + duration > total + 0.01 && !voiceoverFits) voiceoverOverrun = at + duration - total;
+    else if (at + duration > total + 0.01) fail(path, `"voiceover" runs to ${(at + duration).toFixed(2)}s, past the video's end at ${total.toFixed(2)}s: the scenes need ${(at + duration - total + 0.5).toFixed(2)}s more (with a 0.5s tail). Run transcribe (it reads the narration anyway), size each scene to its words, then check again.`);
+    let script = null;
+    if (spec.script != null) {
+      script = resolve(root, spec.script);
+      if (!existsSync(script)) fail(path, `"voiceover.script" ${script} does not exist.`);
+    }
+    voiceover = { file, at, duration, script };
+  }
+
   return {
     path,
+    voiceoverOverrun,
     root,
     width,
     height,
@@ -141,6 +172,7 @@ export function loadManifest(manifestPath) {
     outDir,
     scenes,
     music,
+    voiceover,
     // data-sfx cues play unless the manifest sets "sfx": false.
     sfx: raw.sfx !== false,
     sound: soundDirection(path, raw),

@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -51,7 +51,7 @@ async function seekTo(ms) {
 }
 
 // Prefers a browser already on the machine. MOTION_VIDEO_CHROME overrides the search.
-function systemBrowser() {
+export function systemBrowser() {
   const candidates = [
     process.env.MOTION_VIDEO_CHROME,
     'chromium', 'chromium-browser', 'google-chrome-stable', 'google-chrome',
@@ -79,7 +79,7 @@ const ANGLE = { linux: 'gl-egl', darwin: 'metal', win32: 'd3d11' }[process.platf
 const GPU_ARGS = ['--enable-gpu', '--ignore-gpu-blocklist', '--use-gl=angle', ...(ANGLE ? [`--use-angle=${ANGLE}`] : []), '--enable-gpu-rasterization'];
 let gpuVerdict = null;
 
-async function renderer(browser) {
+export async function renderer(browser) {
   const page = await browser.newPage();
   try {
     return await page.evaluate(() => {
@@ -94,7 +94,8 @@ async function renderer(browser) {
 }
 
 // Launches with the GPU when one works, else software rendering. MOTION_VIDEO_GPU=0 forces software.
-export async function launch() {
+// quiet: no line about the GPU (doctor reports it itself).
+export async function launch({ quiet = false } = {}) {
   const executablePath = systemBrowser() ?? undefined;
   const open = (extra) => chromium.launch({ executablePath, args: [...BASE_ARGS, ...extra] });
   try {
@@ -107,7 +108,7 @@ export async function launch() {
         const r = await renderer(b);
         gpuVerdict = !/swiftshader|llvmpipe|software|none/i.test(r);
         if (gpuVerdict) {
-          console.error(`drawing on GPU: ${r}`);
+          if (!quiet) console.error(`drawing on GPU: ${r}`);
           return b;
         }
         await b.close();
@@ -116,7 +117,8 @@ export async function launch() {
     return await open([]);
   } catch (e) {
     const dir = fileURLToPath(new URL('..', import.meta.url));
-    throw new Error(`Chromium failed to launch (${executablePath ?? 'Playwright bundled build'}): ${e.message.split('\n')[0]}. Install chromium, set MOTION_VIDEO_CHROME to a Chrome binary, or run: cd ${dir} && bunx playwright install chromium-headless-shell`);
+    const bun = spawnSync('bun', ['--version'], { stdio: 'ignore' }).status === 0;
+    throw new Error(`Chromium failed to launch (${executablePath ?? 'Playwright bundled build'}): ${e.message.split('\n')[0]}. Install Chrome or Chromium, set MOTION_VIDEO_CHROME to a Chrome binary, or run: cd ${dir} && ${bun ? 'bunx' : 'npx'} playwright install chromium-headless-shell`);
   }
 }
 
@@ -133,9 +135,11 @@ export async function openScene(browser, m, scene, { scale = 1 } = {}) {
   });
   page.on('requestfailed', (r) => !/^(https?|wss?):/.test(r.url()) && errors.push(`request failed: ${r.url()} (${r.failure()?.errorText})`));
   await page.addInitScript(seedRandom);
-  await page.addInitScript((d) => {
+  await page.addInitScript(([d, start]) => {
+    // Where this scene sits on the video timeline, for anything timed in video seconds (a narration caption track).
+    window.__sceneStart = start;
     document.addEventListener('DOMContentLoaded', () => document.documentElement.style.setProperty('--scene-dur', `${d}s`));
-  }, scene.duration);
+  }, [scene.duration, scene.start ?? 0]);
   await page.goto(pathToFileURL(scene.file).href, { waitUntil: 'networkidle' });
   const failed = await page.evaluate(prepare);
   for (const f of failed) errors.push(`asset failed to load: ${f}`);

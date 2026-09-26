@@ -355,3 +355,7 @@ export const MATERIAL_AWARE = new Set(Object.keys(MATERIAL_ARCHETYPES));
 
 // The pitch range that element size, or data-sfx-pitch, can move a sound across. `sounds` checks both ends.
 export const PITCH_RANGE = [0.8, 1.25];
+
+// Sounds of something appearing (a badge popping in, a card arriving): heard on the element's fastest change, where
+// the eye takes the event in, not when its last few percent of motion settle.
+export const APPEAR = new Set(['pop', 'blip', 'tick', 'ding', 'success', 'shimmer', 'error', 'spring', 'downer', 'boom', 'pluck', 'glitch', 'sting', 'warning', 'jelly', 'hit', 'subdrop']);

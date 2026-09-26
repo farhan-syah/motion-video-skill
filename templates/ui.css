@@ -543,7 +543,8 @@
   position: absolute;
   left: 50%;
   top: 0;
-  translate: -50% -50%;
+  /* Centered with transform, so an entrance that animates translate composes with it and never jumps. */
+  transform: translate(-50%, -50%);
   padding: 0.3em 0.9em;
   border-radius: 999px;
   white-space: nowrap;
@@ -601,3 +602,42 @@
   z-index: 4;
 }
 @keyframes sheet-up { from { translate: 0 105%; } }
+
+/*
+ * Captions: a word-synced line from the narration (motion.js, data-captions). The spoken word sits on a pill.
+ * --captions-y: distance from the bottom. --caption-on: pill color. --caption-ink: text color on the pill.
+ * --caption-edge: the solid outline that keeps white words readable on any frame, light or dark.
+ */
+.captions {
+  position: absolute;
+  left: 50%;
+  bottom: var(--captions-y, 18%);
+  translate: -50% 0;
+  width: 88%;
+  text-align: center;
+  font-size: var(--fs-sub);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: #fff;
+  /* Painted under the fill, so half of it shows: a 0.08em solid edge. */
+  -webkit-text-stroke: 0.16em var(--caption-edge, #111);
+  paint-order: stroke fill;
+  pointer-events: none;
+  z-index: 30;
+}
+.captions > .line-in {
+  display: inline-block;
+  scale: calc(0.9 + 0.1 * var(--pop, 1));
+  opacity: calc(0.4 + 0.6 * var(--pop, 1));
+}
+.captions .w {
+  display: inline-block;
+  padding: 0 0.14em;
+  border-radius: 0.14em;
+}
+.captions .w.on {
+  color: var(--caption-ink, var(--on-accent));
+  background: var(--caption-on, var(--accent));
+  -webkit-text-stroke: 0;
+}

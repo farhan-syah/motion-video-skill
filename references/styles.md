@@ -1,6 +1,6 @@
 # Styles
 
-Each entry lists what makes the style read as itself. Build all of them from `base.css`, `ui.css`, `world.css`, `atmosphere.css`, `icons.js` and `motion.js`. Blend at most two styles, and keep one dominant. Typical layers and camera moves are starting points. The direction picks what fits each scene.
+Each entry lists what makes the style read as itself. All build from `base.css`, `ui.css`, `world.css`, `atmosphere.css`, `icons.js` and `motion.js`. Blend at most two styles, one dominant. Typical layers are starting points: the direction picks what fits each scene.
 
 ## Launch keynote (Apple style)
 
@@ -10,7 +10,7 @@ Each entry lists what makes the style read as itself. Build all of them from `ba
 - **Signature moves:**
   - Blur-to-sharp word reveals: `--in:blur`.
   - Gradient text: `background-clip:text` on the key word.
-  - The product floats in deep space on a slow 3D turn: `.viewport.persp`, with `--yaw` drifting from −14deg to 6deg and `--pitch` from 10deg to 4deg.
+  - The product floats in deep space on a slow 3D turn: `.viewport.persp`. `--yaw` drifts from −14deg to 6deg and `--pitch` from 10deg to 4deg.
   - A specular light sweep crosses glass surfaces: `.sheen` from `ui.css`.
   - Sound is sparse and precise: each reveal lands against quiet.
   - Big numbers roll up: `data-count`.
@@ -37,7 +37,7 @@ Each entry lists what makes the style read as itself. Build all of them from `ba
 
 ## Isometric diorama (Storyset toon)
 
-- **Typical layers:** the diorama is the world. The camera orbits it, pushes into a device screen to show the UI, and pulls back. Prop labels and a placed logo move with it. A numbered caption card can hold still in the `.hud` over it.
+- **Typical layers:** the diorama is the world, with its prop labels and placed logo. The camera orbits it, pushes into a device screen, and pulls back. A numbered caption card can hold in the `.hud`.
 - **Palette:** white or very light background, a grey ground disc, 2 brand colors plus a dark slate ink. Flat faces with toon shading.
 - **Signature moves:**
   - An orthographic camera that slowly orbits (`--yaw` ±10–20deg) and zooms between scenes.
@@ -75,7 +75,7 @@ Each entry lists what makes the style read as itself. Build all of them from `ba
   - Color inverts on the downbeat.
   - Key words change weight.
 - **Build:** position words absolutely on a grid. Cue every word from `beats.json`.
-- **Pitfalls:** words that go by too fast to read. The checker's reading-time warning applies.
+- **Pitfalls:** words too fast to read (`check` warns).
 
 ## Data story
 
@@ -86,7 +86,7 @@ Each entry lists what makes the style read as itself. Build all of them from `ba
   - Counters roll.
   - The camera pushes to the one number that matters, and every other element dims to 30%.
 - **Build:** SVG charts with real numbers. Bars stagger by `--i`, in data order.
-- **Pitfalls:** more than one message per chart. Pick the chart form for the data's message, and use color to encode meaning, not to decorate.
+- **Pitfalls:** more than one message per chart, the wrong chart form, decorative color (`SKILL.md`, Boundaries).
 
 ## Dark tech
 
