@@ -17,10 +17,12 @@ Every claim in the video is a fact from the user or the product. Start with what
 
 - **Read every supplied image.** List its components, copy, colors and layout. A design reference is a component library to rebuild, not a picture to paste.
 - **Sample the palette** from the logo and screenshots in exact hex. Add one neutral dark and one neutral light.
-- **No brand colors:** derive the palette from the product's own world (film: warm cream, amber, deep brown. Paper: off-white and ink. A garden: greens and soil), never from a genre default.
+- **No brand colors:** derive the palette from the product's own supplied material and its audience, never from a genre default.
   - **A reference video** ("like this") lends what the user points at: format, pacing, caption style, devices such as maps and timelines. Take its palette and type only when they ask for its look.
   - **Light or dark:** decide for this product (light reads open and friendly, dark cinematic and focused) and write the reason in `direction.md`.
-  - **Accent:** one hue from the product's character, not its category. Near-black with neon cyan is the stock "tech" look: use it only when the brand is that.
+  - **Accent:** one hue from the product's character, not its category.
+  - **Stock looks:** near-black with neon cyan, and warm paper or cream with terracotta, amber or orange, are where a generated palette drifts when nobody chooses.
+  - **Choose, don't drift:** write three candidate palettes from different hue families in `direction.md`, each with its reason, then pick one. A palette nobody chose is a stock look.
   - **Vary:** two videos for different products must not share a palette by default.
   - **Not the platform's brand:** never borrow the palette or type of the platform the product runs on, the tool it plugs into, or the AI making the video. The exception: the brief says the product carries it.
 - **Type:** from the logo and supplied UI when they show it. Otherwise pick families for this product's voice and fetch them with `font` (`building.md`, Type). The template's Inter is a placeholder.

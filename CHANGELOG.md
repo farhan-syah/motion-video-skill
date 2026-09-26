@@ -10,6 +10,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `doctor` says when a sandbox may hide the browser and the GPU.
 
+### Changed
+
+- Palette rules name where a generated palette drifts, and ask for three candidate palettes before choosing one.
+
+### Fixed
+
+- The palette guidance no longer gives genre example palettes.
+
 ## [1.2.0] - 2026-09-26
 
 ### Added
