@@ -186,6 +186,30 @@ export async function auditVideo(cueLog) {
   const sorted = [...global].sort((x, y) => x - y);
   const noise = Math.max(0.15, sorted[Math.floor(sorted.length / 2)] * 2);
 
+  // An appearance grows into view: its fastest change is the fastest rise in how far the box differs from the frame
+  // before its motion began. Frame-to-frame change also counts glyphs sliding while text scales, which peaks later
+  // than the eye takes the element in.
+  const growthPeak = (pixels, mv) => {
+    const s = Math.max(1, Math.round(mv.start * fps + 0.5));
+    const e = Math.min(frames.length - 1, Math.round(mv.settle * fps + 0.5));
+    const base = frames[s - 1];
+    const n = Math.max(1, pixels.length);
+    let prev = 0;
+    let best = 0;
+    let at = null;
+    for (let i = s; i <= e; i++) {
+      let v = 0;
+      for (const p of pixels) v += Math.abs(frames[i][p] - base[p]);
+      v /= n;
+      if (v - prev > best) {
+        best = v - prev;
+        at = (i - 0.5) / fps;
+      }
+      prev = v;
+    }
+    return at;
+  };
+
   // One sound event against the motion in one element box: { mv, deltaMs, region, fail (message or null) }.
   const judge = (rawBox, event, cls) => {
     // The element's final box, padded 15% so its edges still count. Wider padding picks up neighbours.
@@ -193,7 +217,8 @@ export async function auditVideo(cueLog) {
     const inBox = boxPixels(box);
     const mask = netChangeMask(frames, inBox, fps, event);
     const sparse = mask.length >= 6 && mask.length < inBox.length * 0.25;
-    const local = motion(sparse ? mask : inBox);
+    const pixels = sparse ? mask : inBox;
+    const local = motion(pixels);
     const region = sparse ? `${mask.length} changed px` : 'box';
     const lsorted = [...local].sort((x, y) => x - y);
     const floor = Math.max(noise * 0.5, lsorted[Math.floor(lsorted.length / 2)] * 2, 0.1);
@@ -201,10 +226,11 @@ export async function auditVideo(cueLog) {
     if (mv.peak < floor) return { mv, region, deltaMs: null, fail: `no visible motion in its element's box within 0.6 s (peak change ${mv.peak.toFixed(2)} under floor ${floor.toFixed(2)})` };
     // Contact and appear sounds must fall inside their motion segment. Swells center on its peak. Strokes start with it.
     // An appearance is taken in at its fastest change, so its sound is judged against that frame, not the whole motion.
-    const delta = cls === 'swell' || cls === 'appear' ? (event - mv.peakAt) * 1000 : cls === 'stroke' ? (event - mv.start) * 1000 : event < mv.start ? (event - mv.start) * 1000 : event > mv.settle ? (event - mv.settle) * 1000 : 0;
+    const grown = cls === 'appear' ? growthPeak(pixels, mv) : null;
+    const delta = cls === 'appear' ? (event - (grown ?? mv.peakAt)) * 1000 : cls === 'swell' ? (event - mv.peakAt) * 1000 : cls === 'stroke' ? (event - mv.start) * 1000 : event < mv.start ? (event - mv.start) * 1000 : event > mv.settle ? (event - mv.settle) * 1000 : 0;
     const tol = CLASS[cls];
     const fail = delta < -tol.early ? `${Math.round(-delta)} ms early: it ${tol.rule}` : delta > tol.late ? `${Math.round(delta)} ms late: it ${tol.rule}` : null;
-    return { mv, region, deltaMs: Math.round(delta), fail };
+    return { mv: grown != null ? { ...mv, peakAt: grown } : mv, region, deltaMs: Math.round(delta), fail };
   };
 
   const results = cues.map((c) => {
