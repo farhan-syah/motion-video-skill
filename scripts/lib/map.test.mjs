@@ -51,3 +51,11 @@ test('GeoJSON layers draw with ids from their names, whatever their ring order',
   assert.doesNotMatch(area, /L1084,-4/, 'the area stays a small box, not the whole frame');
   rmSync(dir, { recursive: true, force: true });
 });
+
+test('a pin label can be placed on a chosen side', () => {
+  const pin = parsePlace('Ampang@101.74,3.16:above');
+  assert.equal(pin.side, 'above');
+  const { svg } = drawMap({ width: 1080, height: 1920, bbox: [101.3, 2.9, 101.9, 3.4], pins: [pin, parsePlace('Klang@101.45,3.03:left')] });
+  assert.match(svg, /<text x="0" y="-20" text-anchor="middle">Ampang<\/text>/);
+  assert.match(svg, /<text x="-16" y="10" text-anchor="end">Klang<\/text>/);
+});

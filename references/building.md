@@ -183,8 +183,8 @@ A place makes a video feel made, not templated. Each layer is a full-frame eleme
 - **Precision:** Natural Earth coasts are off by about 1–2 km even at `10m`. At city or island scale, a pier or a bridge end can land in the sea. There, supply precise GeoJSON (for example an OpenStreetMap export the user provides): `--land coast.geojson` replaces the outlines with its polygons, and `--layer bridge.geojson` draws its lines and areas as `#layer-1-<name>`.
 - **Use it:** `<div class="map-wrap" data-inline="../assets/map.svg"></div>` inlines the SVG, so its parts animate: `#route-1` draws, `#pin-penang` enters, `#c-malaysia` fills.
 - **Animate its parts:** a child `<i data-part="#route-1" data-draw data-at="1.2" data-sfx="…" data-sfx-intent="draw"></i>` of the wrapper gives its attributes and classes to that part once it is inlined. Style parts with `.map .route { … }`: the map's own styles yield to any scene rule.
-- **Pins:** the position sits on an outer group, so a scale or bounce on `#pin-…` stays on the spot. Labels are 28px.
-- **Colors:** tokens `--map-land`, `--map-hl`, `--map-border`, `--map-route`, `--map-pin`, `--map-label`, `--map-area`, `--map-line`.
+- **Pins:** the position sits on an outer group, so a scale or bounce on `#pin-…` stays on the spot. Labels are 28px, right of the pin by default. `:left`, `:right`, `:above` or `:below` after the coordinates places one (`--pin "Ampang@101.74,3.16:above"`).
+- **Colors:** a map takes the scene's palette: land is a tint of `--fg` on `--bg`, highlights, routes and pins are `--accent`, labels `--fg`. It brings no palette of its own. Restyle any part with `--map-land`, `--map-hl`, `--map-border`, `--map-route`, `--map-pin`, `--map-label`, `--map-area`, `--map-line`.
 - **A zoom:** draw one map per level (world, country, island) and move between them with a push or a cut.
 - **Names:** `map --countries` lists every country name. Coordinates are longitude first. Take them from a reliable source, since a pin in the wrong place is a false fact.
 

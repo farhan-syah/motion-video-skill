@@ -1,4 +1,5 @@
-// Maps from Natural Earth country outlines (public domain, via world-atlas): a Mercator view fitted to countries, a
+// Colors come from the scene's own palette tokens (--bg, --fg, --accent), so a map carries no palette of its own:
+// the --map-* tokens restyle any part. Maps from Natural Earth country outlines (public domain, via world-atlas): a Mercator view fitted to countries, a
 // box or points, with highlighted countries, pins and great-circle routes. The SVG keeps one element per part, with
 // stable ids, so a scene can animate them (a route draws on with data-draw, a pin pops in, a country fills).
 import { readFileSync } from 'node:fs';
@@ -10,14 +11,15 @@ const require = createRequire(import.meta.url);
 const slug = (t) => t.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-// "Label@lon,lat", "@lon,lat" or "lon,lat".
+// "Label@lon,lat", "@lon,lat" or "lon,lat", with an optional label side: "Label@lon,lat:left" (left, right, above,
+// below). Without one, the label sits right of the pin, or left in the right third of the frame.
 export function parsePlace(spec) {
-  const m = /^(?:(.*)@)?\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$/.exec(spec);
-  if (!m) throw new Error(`"${spec}" is not a place. Write Label@lon,lat (Penang@100.33,5.41), or lon,lat with no label.`);
+  const m = /^(?:(.*)@)?\s*(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*(?::\s*(left|right|above|below))?\s*$/.exec(spec);
+  if (!m) throw new Error(`"${spec}" is not a place. Write Label@lon,lat (Penang@100.33,5.41), lon,lat with no label, and :left, :right, :above or :below after it to place the label.`);
   const lon = Number(m[2]);
   const lat = Number(m[3]);
   if (Math.abs(lon) > 180 || Math.abs(lat) > 90) throw new Error(`"${spec}": longitude comes first (-180 to 180), then latitude (-90 to 90).`);
-  return { label: m[1]?.trim() || null, lon, lat };
+  return { label: m[1]?.trim() || null, lon, lat, ...(m[4] ? { side: m[4] } : {}) };
 }
 
 // d3 reads a polygon's ring order as its inside: a ring wound the other way (RFC 7946 GeoJSON, some Natural Earth
@@ -110,31 +112,40 @@ export function drawMap({ width, height, detail = '50m', fit = [], bbox = null, 
   const LINE = 36;
   const taken = [];
   for (const p of placed) {
-    p.side = p.at[0] > width * 0.66 ? 'left' : 'right';
+    const chosen = !!p.side;
+    p.side ??= p.at[0] > width * 0.66 ? 'left' : 'right';
     p.dy = 0;
     const w = (p.label?.length ?? 0) * 17 + 16;
     const box = () => {
-      const x0 = p.side === 'right' ? p.at[0] + 14 : p.at[0] - 14 - w;
-      return { x0, x1: x0 + w, y: p.at[1] + p.dy };
+      const x0 = p.side === 'right' ? p.at[0] + 14 : p.side === 'left' ? p.at[0] - 14 - w : p.at[0] - w / 2;
+      const y = p.at[1] + p.dy + (p.side === 'above' ? -30 : p.side === 'below' ? 34 : 0);
+      return { x0, x1: x0 + w, y };
     };
+    if (chosen) {
+      taken.push(box());
+      continue;
+    }
     while (taken.some((t) => { const b = box(); return b.x0 < t.x1 && t.x0 < b.x1 && Math.abs(b.y - t.y) < LINE; })) p.dy += LINE;
     taken.push(box());
   }
   // The position sits on an outer group, so an animated transform on the pin (a pop, a bounce) scales about the pin
   // itself and never moves it.
   const pinEls = placed.map((p) => {
-    const text = p.label ? `<text x="${p.side === 'right' ? 16 : -16}" y="${10 + p.dy}" text-anchor="${p.side === 'right' ? 'start' : 'end'}">${esc(p.label)}</text>` : '';
+    const x = { right: 16, left: -16, above: 0, below: 0 }[p.side];
+    const y = { right: 10, left: 10, above: -20, below: 40 }[p.side] + p.dy;
+    const anchor = { right: 'start', left: 'end', above: 'middle', below: 'middle' }[p.side];
+    const text = p.label ? `<text x="${x}" y="${y}" text-anchor="${anchor}">${esc(p.label)}</text>` : '';
     return `<g transform="translate(${p.at[0]} ${p.at[1]})"><g class="pin" id="${p.id}"><circle r="8"/>${text}</g></g>`;
   });
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" class="map" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}">
 <style>
-:where(.map) .country { fill: var(--map-land, #d9cfb4); stroke: var(--map-border, #f4efe2); stroke-width: 0.8; }
-:where(.map) .country.hl { fill: var(--map-hl, #e8b73a); }
-:where(.map) .route { fill: none; stroke: var(--map-route, #c8322b); stroke-width: 3; stroke-linecap: round; }
-:where(.map) .layer.area { fill: var(--map-area, var(--map-hl, #e8b73a)); }
-:where(.map) .layer.line { fill: none; stroke: var(--map-line, var(--map-route, #c8322b)); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
-:where(.map) .pin circle { fill: var(--map-pin, #c8322b); stroke: #fff; stroke-width: 2.5; }
-:where(.map) .pin text { font: 700 28px var(--mono, monospace); fill: var(--map-label, #1b1b1b); }
+:where(.map) .country { fill: var(--map-land, color-mix(in oklab, var(--fg, #888), var(--bg, #fff) 86%)); stroke: var(--map-border, var(--bg, #fff)); stroke-width: 0.8; }
+:where(.map) .country.hl { fill: var(--map-hl, var(--accent, #666)); }
+:where(.map) .route { fill: none; stroke: var(--map-route, var(--accent, #666)); stroke-width: 3; stroke-linecap: round; }
+:where(.map) .layer.area { fill: var(--map-area, var(--map-hl, var(--accent, #666))); }
+:where(.map) .layer.line { fill: none; stroke: var(--map-line, var(--map-route, var(--accent, #666))); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+:where(.map) .pin circle { fill: var(--map-pin, var(--accent, #666)); stroke: var(--bg, #fff); stroke-width: 2.5; }
+:where(.map) .pin text { font: 700 28px var(--mono, monospace); fill: var(--map-label, var(--fg, #111)); }
 </style>
 <g class="land">
 ${land.join('\n')}
