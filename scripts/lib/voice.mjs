@@ -270,6 +270,21 @@ function evenOut(words, limit = Infinity) {
   }
 }
 
+// The last stretch of sound (30 ms or more) between two times, as [start, end] in seconds, or null.
+function lastRun({ env, floor }, from, to) {
+  const frame = (t) => Math.max(0, Math.floor((t * 16000) / HOP));
+  let end = -1;
+  let start = -1;
+  for (let k = Math.min(env.length, frame(to)) - 1; k >= frame(from); k--) {
+    if (env[k] > floor) {
+      if (end < 0) end = k;
+      start = k;
+    } else if (end >= 0 && start - k > 15) break;
+  }
+  if (end < 0 || end - start < 3) return null;
+  return [(start * HOP) / 16000, ((end + 1) * HOP) / 16000];
+}
+
 // fitToSound for a word list and the audio file it came from: run after a script replaces the recognized words.
 // With phrase spans, each phrase settles alone and its words stay inside its span.
 export function fitFile(words, file, phrases = null) {
@@ -284,6 +299,15 @@ export function fitFile(words, file, phrases = null) {
     for (const w of group) {
       w.start = Math.min(Math.max(w.start, p.start), p.end - 0.04);
       w.end = Math.min(Math.max(w.end, w.start + 0.04), p.end);
+    }
+    // Speech after a pause at the end of the phrase with no word on it ("statusnya, [pause] terancam") belongs to the
+    // last word: the recognizer placed it too early, in the tail of the word before.
+    const last = group[group.length - 1];
+    const run = lastRun(env, last.end + 0.15, p.end);
+    if (run && run[0] > last.end + 0.15) {
+      last.start = run[0];
+      last.end = run[1];
+      if (group.length > 1) group[group.length - 2].end = Math.min(group[group.length - 2].end, last.start);
     }
     // Keeping words inside the span can crush the last ones against its end: spread them within it.
     evenOut(group, p.end);
@@ -385,7 +409,25 @@ export function spokenWords(m) {
   return { words: words.sort((a, b) => a.start - b.start), missing };
 }
 
-const norm = (t) => t.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}\s]/gu, ' ').split(/\s+/).filter(Boolean);
+// Words in lower case, punctuation removed, and a number split from a unit written onto it ("5L" is "5 l").
+const norm = (t) => t.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}\s%]/gu, ' ').replace(/(\d)(\p{L}|%)/gu, '$1 $2').split(/\s+/).filter(Boolean);
+
+// Units a recognizer writes short: "L" for "liter", "km" for "kilometer". Each set is one word.
+const UNITS = [['l', 'liter', 'litre', 'liters', 'litres'], ['km', 'kilometer', 'kilometre', 'kilometers', 'kilometres'], ['m', 'meter', 'metre', 'meters', 'metres'],
+  ['kg', 'kilogram', 'kilograms'], ['g', 'gram', 'grams'], ['cm', 'sentimeter', 'centimeter', 'centimetre'], ['%', 'peratus', 'percent', 'persen']];
+const unitOf = new Map(UNITS.flatMap((set, i) => set.map((w) => [w, i])));
+
+// Spoken short forms a recognizer writes out in full, and loanword spellings: each set is one word.
+const SAME = [['ni', 'ini'], ['tu', 'itu'], ['tak', 'tidak'], ['dah', 'sudah'], ['je', 'saja', 'sahaja'], ['kat', 'dekat'], ['nak', 'hendak'],
+  ['org', 'orang'], ['yg', 'yang'], ['dgn', 'dengan'], ['utk', 'untuk'], ['saintis', 'scientist'], ['teknologi', 'technology']];
+const sameOf = new Map(SAME.flatMap((set, i) => set.map((w) => [w, i])));
+
+// A recognized word with a unit written onto its number ("5L") becomes two words at the same time, so the unit can
+// match the script's word for it.
+const splitUnits = (words) => words.flatMap((w) => {
+  const m = /^(.*\d)\s*(\p{L}+|%)([.,!?]*)$/u.exec(w.text);
+  return m && unitOf.has(m[2].toLowerCase()) ? [{ ...w, text: m[1] }, { ...w, text: m[2] + m[3] }] : [w];
+});
 
 // Edit distance, for words the recognizer spelled slightly wrong ("iscribe" for "describe"). Numbers match exactly.
 function distance(a, b) {
@@ -402,7 +444,8 @@ function distance(a, b) {
   return d[b.length];
 }
 // A number is a fact: 1982 and 1985 never match, whatever their spelling distance.
-const alike = (a, b) => a === b || (!/\d/.test(a) && !/\d/.test(b) && distance(a, b) <= Math.max(1, Math.floor(Math.max(a.length, b.length) / 4)));
+// Short words (4 letters or fewer) match only exactly: one letter changes them ("tahi" is not "tapi").
+const alike = (a, b) => a === b || (unitOf.has(a) && unitOf.get(a) === unitOf.get(b)) || (sameOf.has(a) && sameOf.get(a) === sameOf.get(b)) || (!/\d/.test(a) && !/\d/.test(b) && Math.max(a.length, b.length) > 4 && distance(a, b) <= Math.floor(Math.max(a.length, b.length) / 4));
 
 // Finds a phrase in the spoken words: the run of words that matches it best, in order. Speech recognition gets some
 // words wrong, so a run matches when at least 70% of its words are alike. Ties go to the run nearest `near` (video
@@ -459,7 +502,8 @@ function matchWords(words, said) {
 // A pair of alike words is a sure match and keeps its recognized time. The rest (a word misheard beyond recognition,
 // a number spoken as words but written as digits, a dropped word) is spread by letter count over the speech heard
 // between the sure matches around it. Spoken "lapan belas lima puluh tujuh" then shares the span of "1857".
-export function alignScript(words, script) {
+export function alignScript(heard, script) {
+  const words = splitUnits(heard);
   const said = script.split(/\s+/).filter((w) => norm(w).length);
   if (!said.length || !words.length) return words;
   const { pair, sure } = matchWords(words, said);
@@ -497,7 +541,8 @@ export function alignScript(words, script) {
 // after the text, or add a stray word), and sentence words with no speech at all. Recognized words between sure
 // matches stand for the script words there, so a number written as digits covers its spoken words.
 // Returns { ok, extra: [{ text, seconds }], missing: [words], why }.
-export function checkSpeech(words, sentence) {
+export function checkSpeech(heard, sentence) {
+  const words = splitUnits(heard);
   const said = sentence.split(/\s+/).filter((w) => norm(w).length);
   const extra = [];
   const missing = [];
@@ -541,7 +586,9 @@ export function checkSpeech(words, sentence) {
   ].filter(Boolean);
   // How far the take is from its sentence, to keep the best of several takes.
   const badness = extraSeconds + 0.3 * extraWords + 0.3 * missing.length + (wrongNumber ? 1 : 0) + 2 * Math.max(0, 1 - sureShare);
-  return { ok: !why.length, extra, missing, why: why.join(', '), badness };
+  // Words the recognizer did not hear as written (numbers aside): a mispronounced word, or a misheard one.
+  const unsure = plain.filter((x) => !sure[x.i]).map((x) => x.w);
+  return { ok: !why.length, extra, missing, unsure, why: why.join(', '), badness };
 }
 
 // The phrase spans speak writes beside its audio: voiceover.wav -> voiceover.phrases.json.

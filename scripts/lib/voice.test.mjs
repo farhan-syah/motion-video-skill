@@ -116,3 +116,24 @@ test('a long spoken number does not carry a garbled phrase', () => {
   assert.equal(checkSpeech(heard('saya baru lewat tahun 1857.'), 'Semuanya bermula tahun lapan belas lima puluh tujuh.').ok, false);
   assert.equal(checkSpeech(heard('Semuanya bermula tahun 1857.'), 'Semuanya bermula tahun lapan belas lima puluh tujuh.').ok, true);
 });
+
+test('a unit written short, and a spaced decimal, match the spoken words', () => {
+  const heard = (t) => t.split(' ').map((text, i) => ({ text, start: i * 0.4, end: i * 0.4 + 0.35 }));
+  assert.equal(checkSpeech(heard('sampai 3 .5L air.'), 'sampai tiga setengah liter air.').ok, true);
+});
+
+test('a short word matches only exactly: "Tahi" is not "Tapi"', () => {
+  const words = [
+    { text: 'Tapi', start: 17.5, end: 17.8 },
+    { text: 'rezeki', start: 17.8, end: 18.3 },
+    { text: 'Tahi', start: 21.58, end: 21.74 },
+  ];
+  assert.equal(findPhrase(words, 'Tahi', 17).start, 21.58);
+});
+
+test('spoken short forms and loanword spellings count as the same word', () => {
+  const heard = (t) => t.split(' ').map((text, i) => ({ text, start: i * 0.4, end: i * 0.4 + 0.35 }));
+  const r = checkSpeech(heard('Pokok ini cuma tumbuh di Sabah, yang lagi pelik, scientist ukur itu.'), 'Pokok ni cuma tumbuh di Sabah, yang lagi pelik, saintis ukur tu.');
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.unsure, []);
+});
