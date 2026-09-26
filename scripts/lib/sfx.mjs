@@ -366,34 +366,42 @@ function probeElement(sel) {
 }
 
 // True when an element's own animated properties sit within visual tolerance of their final values.
-function arrived(p, fin, size) {
+// Position is judged on screen, by the box's center: an SVG part's translate is in its drawing's own units, which
+// differ from screen pixels whenever the SVG is scaled.
+const center = (b) => [b.x + b.w / 2, b.y + b.h / 2];
+const apart = (a, b) => Math.hypot(center(a)[0] - center(b)[0], center(a)[1] - center(b)[1]);
+
+function arrived(s, fin, size) {
+  const p = s.props;
+  const f = fin.props;
   const px = Math.max(2, 0.02 * size);
   const near = (a, b, t) => Math.abs(a - b) <= t;
   return (
-    near(p.scale, fin.scale, 0.1 * Math.max(Math.abs(fin.scale), 0.05)) &&
-    Math.hypot(p.tx - fin.tx, p.ty - fin.ty, p.tz - fin.tz) <= px &&
-    near(p.rot, fin.rot, 5) &&
-    near(p.opacity, fin.opacity, 0.1) &&
-    near(p.offset, fin.offset, 2) &&
-    near(p.blur, fin.blur, 0.75) &&
-    p.matrix.slice(0, 4).every((v, i) => near(v, fin.matrix[i], 0.1)) &&
-    Math.hypot(p.matrix[4] - fin.matrix[4], p.matrix[5] - fin.matrix[5], p.matrix[6] - fin.matrix[6]) <= px
+    near(p.scale, f.scale, 0.1 * Math.max(Math.abs(f.scale), 0.05)) &&
+    apart(s, fin) <= px &&
+    near(p.tz, f.tz, px) &&
+    near(p.rot, f.rot, 5) &&
+    near(p.opacity, f.opacity, 0.1) &&
+    near(p.offset, f.offset, 2) &&
+    near(p.blur, f.blur, 0.75) &&
+    p.matrix.slice(0, 4).every((v, i) => near(v, f.matrix[i], 0.1))
   );
 }
 
 // How much of an element's change is left, 0 (arrived) to 1 (where it started): the largest share left in any
 // property that changes by a visible amount.
-function remaining(p, first, fin, size) {
+function remaining(s, first, fin, size) {
+  const p = s.props;
   const px = Math.max(2, 0.02 * size);
   const share = (a, from, to, visible) => (Math.abs(to - from) < visible ? 0 : Math.abs(a - to) / Math.abs(to - from));
-  const move = Math.hypot(first.tx - fin.tx, first.ty - fin.ty, first.tz - fin.tz);
+  const move = apart(first, fin);
   return Math.max(
-    share(p.scale, first.scale, fin.scale, 0.05),
-    move < px ? 0 : Math.hypot(p.tx - fin.tx, p.ty - fin.ty, p.tz - fin.tz) / move,
-    share(p.rot, first.rot, fin.rot, 5),
-    share(p.opacity, first.opacity, fin.opacity, 0.1),
-    share(p.blur, first.blur, fin.blur, 0.75),
-    ...p.matrix.slice(0, 4).map((v, i) => share(v, first.matrix[i], fin.matrix[i], 0.1)),
+    share(p.scale, first.props.scale, fin.props.scale, 0.05),
+    move < px ? 0 : apart(s, fin) / move,
+    share(p.rot, first.props.rot, fin.props.rot, 5),
+    share(p.opacity, first.props.opacity, fin.props.opacity, 0.1),
+    share(p.blur, first.props.blur, fin.props.blur, 0.75),
+    ...p.matrix.slice(0, 4).map((v, i) => share(v, first.props.matrix[i], fin.props.matrix[i], 0.1)),
   );
 }
 
@@ -437,14 +445,14 @@ async function measureMotion(page, seek, sel, span, fps) {
     // it: a pop from zero scale grows in area fastest well after its scale does. One that only moves is measured by
     // how much of its move is left.
     if (s && first) {
-      const rem = fades ? 1 - Math.min(1, shown(s) / Math.max(shown(fin), 1e-6)) : remaining(s.props, first.props, fin.props, size);
+      const rem = fades ? 1 - Math.min(1, shown(s) / Math.max(shown(fin), 1e-6)) : remaining(s, first, fin, size);
       if (prevRem != null && prevRem - rem > fastestChange) {
         fastestChange = prevRem - rem;
         landing = t - 500 / fps;
       }
       prevRem = rem;
     }
-    if (s && arrived(s.props, fin.props, size)) {
+    if (s && arrived(s, fin, size)) {
       arrival = t;
       break;
     }
