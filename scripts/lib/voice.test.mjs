@@ -137,3 +137,14 @@ test('spoken short forms and loanword spellings count as the same word', () => {
   assert.equal(r.ok, true);
   assert.deepEqual(r.unsure, []);
 });
+
+test('data units and split compounds count as heard', async () => {
+  const { checkSpeech } = await import('./voice.mjs');
+  const w = (text) => text.split(' ').map((t, i) => ({ text: t, start: i * 0.3, end: i * 0.3 + 0.25 }));
+  const a = checkSpeech(w('It needs 8GB of memory.'), 'It needs eight gigabytes of memory.');
+  assert.ok(a.ok);
+  assert.deepEqual(a.unsure, []);
+  const b = checkSpeech(w('Meta MMS -TTS speaks many languages.'), 'Meta MMS-TTS speaks many languages.');
+  assert.ok(b.ok);
+  assert.deepEqual(b.unsure, []);
+});

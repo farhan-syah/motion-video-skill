@@ -95,7 +95,8 @@ export async function transcribe(file, { model = DEFAULT_MODEL, language } = {})
   // Whisper drops or invents text over long audio. Each piece of at most 20 s, cut in a silence, is read alone.
   let words = [];
   for (const [a, b] of pieces(env, pcm.length)) {
-    const out = await asr(pcm.subarray(a, b), { return_timestamps: 'word', chunk_length_s: 30, ...(language ? { language } : {}) });
+    // Without a language, transformers.js assumes English and says so on every piece: English is named instead.
+    const out = await asr(pcm.subarray(a, b), { return_timestamps: 'word', chunk_length_s: 30, language: language ?? 'en' });
     const at = a / 16000;
     for (const c of out.chunks) {
       const text = c.text.trim();
@@ -414,7 +415,9 @@ const norm = (t) => t.toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}\s%]/
 
 // Units a recognizer writes short: "L" for "liter", "km" for "kilometer". Each set is one word.
 const UNITS = [['l', 'liter', 'litre', 'liters', 'litres'], ['km', 'kilometer', 'kilometre', 'kilometers', 'kilometres'], ['m', 'meter', 'metre', 'meters', 'metres'],
-  ['kg', 'kilogram', 'kilograms'], ['g', 'gram', 'grams'], ['cm', 'sentimeter', 'centimeter', 'centimetre'], ['%', 'peratus', 'percent', 'persen']];
+  ['kg', 'kilogram', 'kilograms'], ['g', 'gram', 'grams'], ['cm', 'sentimeter', 'centimeter', 'centimetre'], ['%', 'peratus', 'percent', 'persen'],
+  ['kb', 'kilobyte', 'kilobytes'], ['mb', 'megabyte', 'megabytes'], ['gb', 'gigabyte', 'gigabytes'], ['tb', 'terabyte', 'terabytes'],
+  ['mhz', 'megahertz'], ['ghz', 'gigahertz']];
 const unitOf = new Map(UNITS.flatMap((set, i) => set.map((w) => [w, i])));
 
 // Spoken short forms a recognizer writes out in full, and loanword spellings: each set is one word.
@@ -586,8 +589,10 @@ export function checkSpeech(heard, sentence) {
   ].filter(Boolean);
   // How far the take is from its sentence, to keep the best of several takes.
   const badness = extraSeconds + 0.3 * extraWords + 0.3 * missing.length + (wrongNumber ? 1 : 0) + 2 * Math.max(0, 1 - sureShare);
-  // Words the recognizer did not hear as written (numbers aside): a mispronounced word, or a misheard one.
-  const unsure = plain.filter((x) => !sure[x.i]).map((x) => x.w);
+  // Words the recognizer did not hear as written (numbers aside): a mispronounced word, or a misheard one. A compound
+  // heard as two words ("MMS -TTS" for "MMS-TTS") was heard right.
+  const stream = words.map((w) => norm(w.text).join('')).join('');
+  const unsure = plain.filter((x) => !sure[x.i] && !(norm(x.w).join('').length > 4 && norm(x.w).length > 1 && stream.includes(norm(x.w).join('')))).map((x) => x.w);
   return { ok: !why.length, extra, missing, unsure, why: why.join(', '), badness };
 }
 
