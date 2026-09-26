@@ -38,6 +38,18 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
 
 - **Engine:** choosing one, and the steps for any engine: `references/tts.md`. Each engine's voice, delivery and writing rules: its guide in `references/tts/`.
 
+### Prepare the script for speech
+
+A voice reads only the text. Its punctuation, spelling and word order are all it has for pauses, stress and pronunciation. Prepare the whole script before `speak`:
+
+1. **Run `speak script.txt --review`.** It generates nothing and lists what a voice is likely to misread: flags, file names and addresses, letters mixed with digits, digits outside English, long sentences with no comma, and lines with no end punctuation.
+2. **Read each sentence as it will be heard.** A comma or period marks every break a listener needs. A word that can be a noun or a verb after a noun ("recognition times each word", "the project records sound") can be read as part of the noun, which moves the pause. A comma or a rewording fixes the reading.
+3. **Give every unusual token a spoken form** with `{written|spoken}`: names, acronyms the voice might say as a word, symbols, file names, versions.
+4. **End every question with "?"**, and every statement with a period.
+5. **Run `--review` again**, then `speak`.
+
+After `speak`, its check reports what still went wrong in the audio (Speech check, below).
+
 ### Pauses
 
 | In the script              | Pause                          |
@@ -63,6 +75,8 @@ Kokoro, Hugging Face models and the user's TTS keep every mark exact. VoxCPM2 ke
 - **Numbers:** every number must be heard as the script says it.
 - **Glitches (VoxCPM2):** a click, a thump before or after the speech, and a take cut off mid-sound. Every take's edges fade over a few milliseconds, so joins never click.
 - **Doubtful words:** when a passing phrase has words heard differently, a second Whisper model hears it too. A word both models miss is marked `ok ?`: listen to it.
+- **Stray pauses:** a pause over 0.45 s between two words with no punctuation between them is marked `ok ?`. A voice phrases by how it reads the grammar, so a word that can be a noun or a verb ("recognition times each word") can pull the pause to the wrong place. A comma where the break belongs, or a rewording, sets it.
+- **`ok ?` without audio playback:** reword the line, or give the name a spoken form (`{written|spoken}`), then run `speak` again. The line is settled when both recognizers hear it as written.
 - **Delivery (VoxCPM2):** a part whose pitch peaks above 1.6 times the voice's usual pitch is marked `ok ?`: it may sound shouted or excited. Listen, then calm its note or re-roll it.
 
 - **Per engine:** VoxCPM2 checks each beat and retries a failing one. Other engines get one check of the whole file.

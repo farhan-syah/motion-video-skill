@@ -398,6 +398,51 @@ function samples(file) {
 // a stray word, or drop words; the take is then regenerated.
 const clip = (t, n = 140) => (t.length > n ? `${t.slice(0, n)}…` : t);
 
+// A script read the way a voice will read it, before any audio: what the voice is likely to misread or run together.
+// Returns [{ line, text, note }]. Judgment the rules cannot make (a word that reads as a noun or a verb) stays with
+// the writer: narration.md, Prepare the script for speech.
+export function review(script, { language } = {}) {
+  const out = [];
+  const english = !language || /^en/i.test(language);
+  script.replace(/\r/g, '').split('\n').forEach((raw, n) => {
+    const line = raw.replace(LEAD, '').trim();
+    if (!line) return;
+    const where = n + 1;
+    // Only the words the voice says: written forms and tags removed, spoken forms kept.
+    const said = withoutTags(say(line.replace(/\[pause(?:\s+[\d.]+)?\]/gi, ' ')));
+    const bare = line.replace(SAID, ' ');
+    for (const token of bare.split(/\s+/)) {
+      const t = token.replace(/^["'“‘(\[]+|["'”’)\].,;:!?…]+$/g, '');
+      if (!t) continue;
+      if (/^-{1,2}\w|\w[./_@\\]\w|^https?:|\.\w{2,4}$/i.test(t)) out.push({ line: where, text: t, note: `a flag, file name or address: write how it is said, {${t}|…}` });
+      else if (/\d/.test(t) && /\p{L}/u.test(t)) out.push({ line: where, text: t, note: `letters and digits together: write how it is said, {${t}|…}` });
+      else if (!english && /^\d[\d.,]*$/.test(t)) out.push({ line: where, text: t, note: 'digits outside English: write the number as words' });
+    }
+    for (const s of said.match(/[^.!?…]+[.!?…]*/g) ?? []) {
+      const words = s.trim().split(/\s+/).filter(Boolean);
+      if (words.length > 20 && !/[,;:—–]/.test(s)) out.push({ line: where, text: `${words.slice(0, 6).join(' ')}…`, note: `${words.length} words with no comma: the voice picks its own breath points. A comma sets them` });
+    }
+    if (/\p{L}/u.test(said) && !/[.!?…:;,"'”’)\]]$/u.test(said.trim())) out.push({ line: where, text: said.trim().split(/\s+/).slice(-3).join(' '), note: 'no end punctuation: the voice runs into the next line' });
+  });
+  return out;
+}
+
+// Pauses the script does not ask for: a silence over 0.45 s between two words with no punctuation between them. A
+// voice phrases by how it reads the grammar, so a word that can be a noun or a verb ("recognition times each word")
+// can pull the pause to the wrong place. Every word is still said, so the word check passes it.
+export const STRAY_PAUSE = 0.45;
+export function strayPauses(heard, text, alignScript) {
+  const out = [];
+  const al = alignScript(heard, text);
+  for (let i = 0; i + 1 < al.length; i++) {
+    const [a, b] = [al[i], al[i + 1]];
+    if (a.end == null || b.start == null || /[,.;:!?…—–-]["'”’)\]]*$/.test(a.text)) continue;
+    const gap = b.start - a.end;
+    if (gap > STRAY_PAUSE) out.push({ after: a.text, before: b.text, gap: +gap.toFixed(2) });
+  }
+  return out;
+}
+
 async function heardCheck(file, text, language) {
   const { transcribe, checkSpeech, asrModel, DEFAULT_MODEL, SMALL_MODEL } = await import('./voice.mjs');
   const model = asrModel(language);
@@ -418,7 +463,8 @@ async function heardCheck(file, text, language) {
     const off = (x) => [...x.unsure, ...x.missing];
     doubt = [...new Set(off(c).filter((w) => off(c2).includes(w)))];
   }
-  return { ...c, doubt, heard: clip(t.words.map((w) => w.text).join(' ')) };
+  const { alignScript } = await import('./voice.mjs');
+  return { ...c, doubt, pauses: strayPauses(t.words, text, alignScript), heard: clip(t.words.map((w) => w.text).join(' ')) };
 }
 
 // VoxCPM2 through its runner (scripts/tts/voxcpm_speak.py). uv builds the Python environment on first use (PyTorch,
@@ -602,7 +648,7 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
       duration: r.duration,
       phrases: beatSpans.map(({ origin: _, ...p }) => ({ ...p, text: spoken(p.text) })),
       voiceFile,
-      checks: best.map((b, i) => ({ at: placed[i].start, text: spoken(units[i].text), ok: b.ok, heard: b.heard, why: b.why, seed: b.seed, doubt: b.doubt ?? [], heat: b.heat })),
+      checks: best.map((b, i) => ({ at: placed[i].start, text: spoken(units[i].text), ok: b.ok, heard: b.heard, why: b.why, seed: b.seed, doubt: b.doubt ?? [], heat: b.heat, pauses: b.pauses ?? [] })),
       problems: failed.map((b) => `part ${b.i + 1} "${units[b.i].text}": ${b.why} (heard "${b.heard}"). Three takes failed, so reword it first (a longer line, another word order). --reroll ${b.i + 1} draws new takes.`),
     };
   } finally {
@@ -903,6 +949,6 @@ export async function speak(script, out, opts = {}) {
   }
   // The whole file is transcribed back once: a problem is reported, since these engines keep no per-phrase takes.
   const c = await heardCheck(out, sayable(script), opts.language);
-  return { ...result, checks: [{ at: 0, text: spoken(script), ok: c.ok, heard: c.heard, why: c.why, doubt: c.doubt ?? [] }], problems: c.ok ? [] : [`${c.why}. Heard: "${c.heard}".`] };
+  return { ...result, checks: [{ at: 0, text: spoken(script), ok: c.ok, heard: c.heard, why: c.why, doubt: c.doubt ?? [], pauses: c.pauses ?? [] }], problems: c.ok ? [] : [`${c.why}. Heard: "${c.heard}".`] };
 }
 

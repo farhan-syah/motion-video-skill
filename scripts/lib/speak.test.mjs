@@ -140,3 +140,26 @@ test('pitch tracking reads a voice, and a pitch swing counts as heat', async () 
   assert.ok(heat(climb, 150) > 1.6);
   assert.ok(heat(tone(160, 1), 150) < 1.2);
 });
+
+test('a pause where the script has no break is flagged, one at punctuation is not', async () => {
+  const { strayPauses } = await import('./speak.mjs');
+  const { alignScript } = await import('./voice.mjs');
+  const at = (list) => list.map(([text, start, end]) => ({ text, start, end }));
+  const heard = at([['Speech', 0, 0.3], ['recognition', 0.3, 0.8], ['times', 0.8, 1.1], ['each', 1.7, 1.9], ['word.', 1.9, 2.2], ['Captions', 3.0, 3.4], ['follow.', 3.4, 3.8]]);
+  const p = strayPauses(heard, 'Speech recognition times each word. Captions follow.', alignScript);
+  assert.deepEqual(p, [{ after: 'times', before: 'each', gap: 0.6 }]);
+});
+
+test('the script review flags what a voice is likely to misread', async () => {
+  const { review } = await import('./speak.mjs');
+  const script = 'Run it with --command and save video.mp4\nVoxCPM2 speaks thirty languages. {VoxCPM2|Vox C P M two} is ready.\nThis sentence keeps going on and on without a single pause mark so the voice has to guess where to breathe in it.';
+  const notes = review(script).map((r) => [r.line, r.text]);
+  assert.deepEqual(notes, [
+    [1, '--command'],
+    [1, 'video.mp4'],
+    [1, 'and save video.mp4'],
+    [2, 'VoxCPM2'],
+    [3, 'This sentence keeps going on and…'],
+  ]);
+  assert.deepEqual(review('Tiga puluh bahasa. Harga 25 ringgit.', { language: 'ms' }).map((r) => r.text), ['25']);
+});

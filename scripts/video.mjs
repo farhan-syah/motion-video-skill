@@ -31,7 +31,7 @@ Commands:
                                  --land replaces the outlines with precise polygons, --layer draws lines and areas.
                                  Default size: the manifest's. --countries lists every country name.
   speak TEXT|FILE [--engine kokoro|voxcpm] [--voice V] [--style S] [--reference WAV] [--speed S] [--pace P] [--seed N]
-        [--reroll 3,7] [--cfg 1.6] [--steps 16]
+        [--reroll 3,7] [--cfg 1.6] [--steps 16] [--review]
         [--language L]
         [--model HF_ID | --command "TEMPLATE" [--one-call]] [--out WAV]
                                  Narration from a script. Writes the WAV and its script next to it (default
@@ -110,6 +110,7 @@ function parseArgs(argv) {
     else if (a === '--out') opts.out = argv[++i];
     else if (a === '--command') opts.command = argv[++i];
     else if (a === '--one-call') opts.oneCall = true;
+    else if (a === '--review') opts.review = true;
     else if (a === '--engine') opts.engine = argv[++i];
     else if (a === '--reference') opts.reference = argv[++i];
     else if (a === '--device') opts.device = argv[++i];
@@ -305,6 +306,15 @@ async function speakCmd(opts) {
   const { parseTimedScript } = await import('./lib/subtitles.mjs');
   const cues = parseTimedScript(raw);
   const script = cues ? cues.map((c) => c.text).join('\n') : raw;
+  // The script read as a voice will read it, before any audio. --review stops here.
+  const { review } = await import('./lib/speak.mjs');
+  const notes = review(script, { language: opts.language ?? undefined });
+  if (notes.length || opts.review) {
+    console.log(notes.length ? `Script review, ${notes.length} note(s) (narration.md, Prepare the script for speech):` : 'Script review: nothing likely to be misread.');
+    for (const r of notes) console.log(`  line ${r.line}  "${r.text}": ${r.note}`);
+    console.log('');
+  }
+  if (opts.review) return 0;
   const out = resolve(opts.out ?? 'assets/voiceover.wav');
   mkdirSync(dirname(out), { recursive: true });
   const { duration, engine, problems = [], phrases, checks = [], timing = [] } = await speak(script, out, {
@@ -352,7 +362,7 @@ or "audio": "${rel(out)}" and "script": "${rel(txt)}" on the one scene it narrat
   // Every phrase as it was heard back, so a wrong word shows even when the check passes it.
   console.log('\nHeard back, phrase by phrase:');
   const { HEATED } = await import('./lib/speak.mjs');
-  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length || c.heat > HEATED ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.heat > HEATED ? `\n        its pitch peaks at ${c.heat}x the voice's usual pitch: it may sound shouted or excited. Listen, then calm its delivery note or --reroll it` : ''}${c.doubt?.length ? `\n        both recognizers missed or misheard ${c.doubt.map((w) => `"${w}"`).join(', ')}: listen to it, and ${/^VoxCPM2/.test(engine) ? '--reroll this phrase' : 'reword the phrase'} if it is said wrong` : ''}`);
+  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length || c.heat > HEATED || c.pauses?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.heat > HEATED ? `\n        its pitch peaks at ${c.heat}x the voice's usual pitch: it may sound shouted or excited. Listen, then calm its delivery note or --reroll it` : ''}${(c.pauses ?? []).map((p) => `\n        a ${p.gap}s pause between "${p.after}" and "${p.before}", where the script has no break: the voice may have misread the grammar. Add a comma where the break belongs, or reword`).join('')}${c.doubt?.length ? `\n        both recognizers missed or misheard ${c.doubt.map((w) => `"${w}"`).join(', ')}: listen to it, and ${/^VoxCPM2/.test(engine) ? '--reroll this phrase' : 'reword the phrase'} if it is said wrong` : ''}`);
   if (problems.length) {
     console.log(`\nThe speech check found ${problems.length} problem(s), heard back with Whisper:`);
     for (const p of problems) console.log(`  ${p}`);

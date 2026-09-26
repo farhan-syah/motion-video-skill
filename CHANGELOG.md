@@ -11,6 +11,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `speak` flags a VoxCPM2 part whose pitch swings far above the voice's usual pitch.
 - `{written|spoken}` script syntax: captions show the written form, and the voice says the spoken form.
 - `doctor` says when a sandbox may hide the browser and the GPU.
+- `speak --review` lists what a voice is likely to misread in a script, before any audio. `speak` prints the same review first.
+- `speak` flags a pause where the script has no break.
 - The sound intent error names the intents the sound fits and the sounds that fit the intent.
 
 ### Changed
