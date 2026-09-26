@@ -118,3 +118,25 @@ test('de-essing turns down a harsh "s" and leaves the rest untouched', async () 
   assert.ok(s(y) < s(x) * 0.5, 'the "s" is turned down by more than 6 dB');
   assert.ok(Math.abs(v(y) / v(x) - 1) < 0.01, 'the vowel passes untouched');
 });
+
+test('a word can be written one way and said another', async () => {
+  const { say, sayable } = await import('./speak.mjs');
+  const script = 'With {uv|U V} installed, {VoxCPM2|Vox C P M two} is the default.\nRun it with {--command|dash dash command}.';
+  assert.equal(spoken(script), 'With uv installed, VoxCPM2 is the default. Run it with --command.');
+  assert.equal(sayable(script), 'With U V installed, Vox C P M two is the default. Run it with dash dash command.');
+  assert.equal(say(chunks(script)[0].text), 'With U V installed, Vox C P M two is the default. Run it with dash dash command.');
+});
+
+test('pitch tracking reads a voice, and a pitch swing counts as heat', async () => {
+  const { pitches, heat, medianPitch } = await import('./speak.mjs');
+  const rate = 48000;
+  const tone = (hz, seconds) => Float32Array.from({ length: Math.round(seconds * rate) }, (_, i) => 0.3 * Math.sin((2 * Math.PI * hz * i) / rate));
+  const p = pitches(tone(150, 1));
+  assert.ok(p.length > 10 && Math.abs(medianPitch(tone(150, 1)) - 150) < 5);
+  // A part that climbs from the voice's pitch to twice it is heated. One that stays near it is not.
+  const climb = new Float32Array(rate);
+  climb.set(tone(150, 0.5));
+  climb.set(tone(300, 0.5), rate / 2);
+  assert.ok(heat(climb, 150) > 1.6);
+  assert.ok(heat(tone(160, 1), 150) < 1.2);
+});

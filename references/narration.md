@@ -52,6 +52,7 @@ Kokoro, Hugging Face models and the user's TTS keep every mark exact. VoxCPM2 ke
 ### Writing for a generated voice
 
 - **Numbers:** in languages other than English, write them as words. A voice can read digits in English. Captions show the spoken words.
+- **Written and spoken forms:** when a name or term must be said differently from how it is written, write both: `{VoxCPM2|Vox C P M two}`, `{uv|U V}`, `{--command|dash dash command}`. Captions and on-screen text show the written form. The voice says the spoken form, and the speech check listens for it. Never write a spelled-out form alone, or captions show it.
 - **Engine rules:** delivery notes, tags and other engine-specific writing live in the engine's guide.
 
 ### Speech check
@@ -62,6 +63,7 @@ Kokoro, Hugging Face models and the user's TTS keep every mark exact. VoxCPM2 ke
 - **Numbers:** every number must be heard as the script says it.
 - **Glitches (VoxCPM2):** a click, a thump before or after the speech, and a take cut off mid-sound. Every take's edges fade over a few milliseconds, so joins never click.
 - **Doubtful words:** when a passing phrase has words heard differently, a second Whisper model hears it too. A word both models miss is marked `ok ?`: listen to it.
+- **Delivery (VoxCPM2):** a part whose pitch peaks above 1.6 times the voice's usual pitch is marked `ok ?`: it may sound shouted or excited. Listen, then calm its note or re-roll it.
 
 - **Per engine:** VoxCPM2 checks each beat and retries a failing one. Other engines get one check of the whole file.
 - **Output:** every part as heard. A remaining problem prints its fix and exits 1: reword it, or re-roll it where the engine allows (`tts/voxcpm2.md`).
@@ -73,7 +75,7 @@ Kokoro, Hugging Face models and the user's TTS keep every mark exact. VoxCPM2 ke
 
 ## Time the picture to the words
 
-1. **Transcribe:** `transcribe` prints each word at its video time (local Whisper) and writes `out/voice/words.json`.
+1. **Transcribe:** `transcribe` prints each word at its video time (local Whisper). With no file named, it reads the manifest's narration and writes `out/voice/words.json`, the video timeline captions read, plus `out/voice/<name>.words.json` per narration file. With a file named, it writes only `out/voice/<name>.words.json`.
    - With a script (`voiceover.script`, a scene's `script`, or `--script`), the script's words take the recognized times.
    - A voiceover longer than the scenes is still read, with the overrun printed.
    - The first run installs the speech runtime (about 500 MB).

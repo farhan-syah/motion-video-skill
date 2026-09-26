@@ -31,9 +31,12 @@ OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description
 
 - **Write an instruction as sound:** tone, emotion and pace, the way VoxCPM2's guide does: `(slightly faster, cheerful tone)`, `(speaking very fast, bright and full)`. Describe how the voice behaves, never what the line means: `(curious tone, rising intonation)`, not `(asking a question)`.
 - **`--style "(calm, warm tone, unhurried pace)"`** steers every generation. It changes emotion, pace and delivery, never the voice.
-- **Delivery notes** open a line and replace `--style` for that line only. Keep one word of the base tone, then the change and how the voice moves: `(calm, curious tone, rising intonation) Where does the water go?`, `(calm, a little brighter) It worked the first time.`. A note without the base tone swings the line far from the rest, and one appended to a long style is outweighed by it. The line becomes its own generation, since an instruction covers everything a generation speaks. Give every question and every change of tone its note: a line spoken in the beat's delivery reads a question as a statement.
+- **Delivery notes** open a line and replace `--style` for that line only, as its own generation, since an instruction covers everything a generation speaks: `(calm, curious tone, rising intonation) Where does the water go?`.
+  - A question spoken in the beat's delivery reads as a statement. A note gives it its own intonation.
+  - A short note that keeps one word of the base tone changes the line and holds the voice. A note without it swings the line far from the rest, and one appended to a long style is outweighed by it.
+- **How notes behave:** each note replaces the base delivery for its line, so many notes make the delivery swing from line to line. Energy words ("animated", "bright", "excited", "energetic") push the voice toward shouting. `--style` sets the base once for every line without a note.
 - **Results vary between runs:** re-roll a line whose delivery misses (`--reroll`), up to 3 times.
-- **Non-verbal tags**, written where the sound happens: `[laughing]`, `[sigh]`, `[Uhm]`, `[Shh]`, `[Question-ah]`, `[Question-ei]`, `[Question-en]`, `[Question-oh]`, `[Surprise-wa]`, `[Surprise-yo]`, `[Dissatisfaction-hnn]`. Use them rarely, at most one per sentence, in lowercase where the tag has it.
+- **Non-verbal tags**, written where the sound happens: `[laughing]`, `[sigh]`, `[Uhm]`, `[Shh]`, `[Question-ah]`, `[Question-ei]`, `[Question-en]`, `[Question-oh]`, `[Surprise-wa]`, `[Surprise-yo]`, `[Dissatisfaction-hnn]`. VoxCPM2's guide advises using them sparingly, at most one per sentence, in lowercase where the tag has it.
 - Notes and tags are never shown in captions or checked.
 
 ## Writing for it

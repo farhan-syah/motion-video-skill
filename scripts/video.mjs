@@ -351,7 +351,8 @@ Next, in video.json: "voiceover": { "file": "${rel(out)}", "script": "${rel(txt)
 or "audio": "${rel(out)}" and "script": "${rel(txt)}" on the one scene it narrates. Then run transcribe.`);
   // Every phrase as it was heard back, so a wrong word shows even when the check passes it.
   console.log('\nHeard back, phrase by phrase:');
-  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.doubt?.length ? `\n        both recognizers missed or misheard ${c.doubt.map((w) => `"${w}"`).join(', ')}: listen to it, and ${/^VoxCPM2/.test(engine) ? '--reroll this phrase' : 'reword the phrase'} if it is said wrong` : ''}`);
+  const { HEATED } = await import('./lib/speak.mjs');
+  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length || c.heat > HEATED ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.heat > HEATED ? `\n        its pitch peaks at ${c.heat}x the voice's usual pitch: it may sound shouted or excited. Listen, then calm its delivery note or --reroll it` : ''}${c.doubt?.length ? `\n        both recognizers missed or misheard ${c.doubt.map((w) => `"${w}"`).join(', ')}: listen to it, and ${/^VoxCPM2/.test(engine) ? '--reroll this phrase' : 'reword the phrase'} if it is said wrong` : ''}`);
   if (problems.length) {
     console.log(`\nThe speech check found ${problems.length} problem(s), heard back with Whisper:`);
     for (const p of problems) console.log(`  ${p}`);

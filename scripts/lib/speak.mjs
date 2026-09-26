@@ -23,7 +23,7 @@ function spans(list, parts, rate) {
   let t = 0;
   list.forEach((p, i) => {
     const len = parts[i * 2].length / rate;
-    out.push({ text: p.text, start: +t.toFixed(3), end: +(t + len).toFixed(3) });
+    out.push({ text: spoken(p.text), start: +t.toFixed(3), end: +(t + len).toFixed(3) });
     t += len + parts[i * 2 + 1].length / rate;
   });
   return out;
@@ -155,7 +155,16 @@ const LEAD = /^[ \t]*\(([^()\n]{2,120})\)[ \t]*/;
 
 // The words of a script as spoken: delivery notes, pause marks and tags removed, one line. This is the script captions
 // and checks read.
-export const spoken = (script) => withoutTags(script.replace(new RegExp(LEAD.source, 'gm'), '').replace(/\[pause(?:\s+[\d.]+)?\]/gi, ' ')).replace(/\s+/g, ' ').trim();
+const clean = (script) => withoutTags(script.replace(new RegExp(LEAD.source, 'gm'), '').replace(/\[pause(?:\s+[\d.]+)?\]/gi, ' ')).replace(/\s+/g, ' ').trim();
+
+// A word written one way and said another: {VoxCPM2|Vox C P M two}, {--command|dash dash command}. Captions and the
+// screen show the written form. The voice says the spoken form, and the speech check listens for it.
+const SAID = /\{([^{}|\n]+)\|([^{}\n]+)\}/g;
+export const say = (text) => text.replace(SAID, '$2');
+export const shown = (text) => text.replace(SAID, '$1');
+export const spoken = (script) => clean(shown(script));
+// The words as the voice says them: what the speech check compares a take with.
+export const sayable = (script) => clean(say(script));
 
 // A stop inside a number ("13.5") or a name ("Node.js") is not a sentence end: Latin stops end one only before a
 // space or the end of the text. CJK stops always do.
@@ -169,7 +178,7 @@ async function kokoro(script, { model = KOKORO, voice = DEFAULT_VOICE, speed = 1
   let rate = 24000;
   const list = phrases(script);
   for (const p of list) {
-    const audio = await tts.generate(p.text, { voice, speed });
+    const audio = await tts.generate(say(p.text), { voice, speed });
     rate = audio.sampling_rate;
     parts.push(audio.audio, new Float32Array(Math.round(p.pause * rate)));
   }
@@ -189,7 +198,7 @@ async function transformersModel(script, { model }) {
   let rate = 16000;
   const list = phrases(script);
   for (const p of list) {
-    const out = await tts(p.text);
+    const out = await tts(say(p.text));
     rate = out.sampling_rate;
     parts.push(out.audio, new Float32Array(Math.round(p.pause * rate)));
   }
@@ -207,7 +216,7 @@ function pythonModel(script, { model, why }) {
   const dir = mkdtempSync(join(tmpdir(), 'motion-video-tts-'));
   try {
     const listFile = join(dir, 'sentences.json');
-    writeFileSync(listFile, JSON.stringify(list.map((p, index) => ({ index, text: p.text, seed: 7 }))));
+    writeFileSync(listFile, JSON.stringify(list.map((p, index) => ({ index, text: say(p.text), seed: 7 }))));
     const runner = fileURLToPath(new URL('../tts/hf_speak.py', import.meta.url));
     console.error(`speak: running ${model} in Python on the CPU. The first run builds its environment and downloads the model.`);
     const env = { ...process.env, HF_HUB_CACHE: process.env.HF_HUB_CACHE ?? modelsDir(), TQDM_DISABLE: '1', PYTHONWARNINGS: 'ignore', TRANSFORMERS_VERBOSITY: 'error' };
@@ -246,11 +255,11 @@ export function command(script, { command: template, voice = '', reference = '',
     return audio;
   };
   try {
-    if (oneCall) return wav([run(spoken(script))], RATE);
+    if (oneCall) return wav([run(sayable(script))], RATE);
     const list = phrases(script);
     const parts = [];
     list.forEach((p, i) => {
-      parts.push(run(p.text), new Float32Array(Math.round(p.pause * RATE)));
+      parts.push(run(say(p.text)), new Float32Array(Math.round(p.pause * RATE)));
       if (list.length > 1) console.error(`tts command: ${i + 1}/${list.length} phrases`);
     });
     return { ...wav(parts, RATE), phrases: spans(list, parts, RATE) };
@@ -471,7 +480,7 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
     const generate = (list, designing = false) => {
       console.error(`speak: VoxCPM2 is speaking ${list.length} part(s)${checkpoint ? '' : ' after the download'}, about 3 s per sentence on a GPU.`);
       const listFile = join(dir, 'sentences.json');
-      writeFileSync(listFile, JSON.stringify(list));
+      writeFileSync(listFile, JSON.stringify(list.map((s) => ({ ...s, text: say(s.text) }))));
       const args = ['run', '--quiet', runner, '--sentences', listFile, '--dir', dir, '--model', checkpoint ?? VOXCPM, '--cfg', String(cfg), '--steps', String(steps)];
       if (voice && designing) args.push('--voice', voice);
       if (style && !designing) args.push('--style', style);
@@ -490,7 +499,7 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
     };
     if (anchorFile && !existsSync(anchorFile)) {
       console.error(`speak: designing the voice from --voice, speaking the script's opening: "${opening.join(' ')}"`);
-      generate([{ index: 0, text: opening.join(' '), seed }], true);
+      generate([{ index: 0, text: say(opening.join(' ')), seed }], true);
       copyFileSync(join(dir, 'anchor.wav'), anchorFile);
     }
     // The voice sits beside the audio too: listen to it before judging the rest, and pass it as --reference to give
@@ -504,7 +513,7 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
       const tidied = take.replace(/\.wav$/, '.tidy.wav');
       const t = tidy(samples(take));
       if (!existsSync(tidied)) writeFileSync(tidied, wav([t.samples], 48000).buf);
-      const c = await heardCheck(tidied, spoken(s.text), language);
+      const c = await heardCheck(tidied, sayable(s.text), language);
       const pops = clicks(t.samples);
       const faults = [...t.faults, ...(pops.length ? [`a click at ${pops.map((v) => `${v}s`).join(', ')} into the part`] : [])];
       if (faults.length) {
@@ -572,6 +581,10 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
       origin = from;
       best = await pick(units, []);
     }
+    // Delivery: a part whose pitch swings far above the voice's usual pitch tends to sound shouted or excited, which
+    // the speech check cannot hear. It is flagged for a listen.
+    const voiceMedian = medianPitch(samples(reference || anchorFile));
+    for (const b of best) b.heat = +heat(samples(b.file), voiceMedian).toFixed(2);
     const parts = best.flatMap((b, i) => [samples(b.file), new Float32Array(Math.round(units[i].pause * 48000))]);
     const r = wav(parts, 48000);
     writeFileSync(out, r.buf);
@@ -589,7 +602,7 @@ async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.
       duration: r.duration,
       phrases: beatSpans.map(({ origin: _, ...p }) => ({ ...p, text: spoken(p.text) })),
       voiceFile,
-      checks: best.map((b, i) => ({ at: placed[i].start, text: spoken(units[i].text), ok: b.ok, heard: b.heard, why: b.why, seed: b.seed, doubt: b.doubt ?? [] })),
+      checks: best.map((b, i) => ({ at: placed[i].start, text: spoken(units[i].text), ok: b.ok, heard: b.heard, why: b.why, seed: b.seed, doubt: b.doubt ?? [], heat: b.heat })),
       problems: failed.map((b) => `part ${b.i + 1} "${units[b.i].text}": ${b.why} (heard "${b.heard}"). Three takes failed, so reword it first (a longer line, another word order). --reroll ${b.i + 1} draws new takes.`),
     };
   } finally {
@@ -704,6 +717,47 @@ export function deEssFile(file) {
   writeFileSync(file, wav([deEss(samples(file), 48000, stats)], 48000).buf);
   return stats;
 }
+
+// Pitch in Hz of each voiced 40 ms frame of 48 kHz audio, by autocorrelation at 16 kHz (60-400 Hz).
+export function pitches(x) {
+  const y = new Float32Array(Math.floor(x.length / 3));
+  for (let i = 0; i < y.length; i++) y[i] = (x[3 * i] + x[3 * i + 1] + x[3 * i + 2]) / 3;
+  const sr = 16000;
+  const w = 640;
+  const [lo, hi] = [Math.floor(sr / 400), Math.floor(sr / 60)];
+  const out = [];
+  for (let i = 0; i + w <= y.length; i += 320) {
+    let mean = 0;
+    for (let k = 0; k < w; k++) mean += y[i + k];
+    mean /= w;
+    let e = 0;
+    for (let k = 0; k < w; k++) e += (y[i + k] - mean) ** 2;
+    if (Math.sqrt(e / w) < 0.01) continue;
+    let best = 0;
+    let lag = 0;
+    for (let l = lo; l <= hi; l++) {
+      let c = 0;
+      for (let k = 0; k + l < w; k++) c += (y[i + k] - mean) * (y[i + k + l] - mean);
+      if (c > best) (best = c), (lag = l);
+    }
+    if (lag && best > 0.4 * e) out.push(sr / lag);
+  }
+  return out;
+}
+
+const percentile = (list, p) => {
+  const s = [...list].sort((a, b) => a - b);
+  return s.length ? s[Math.min(s.length - 1, Math.floor(s.length * p))] : 0;
+};
+
+// How far a part's pitch peaks (95th percentile) rise above the voice's usual pitch (the reference's median). A calm
+// read stays under about 1.5; a part over 1.6 tends to sound shouted or excited.
+export const HEATED = 1.6;
+export function heat(part, voiceMedian) {
+  const p = pitches(part);
+  return p.length && voiceMedian ? percentile(p, 0.95) / voiceMedian : 0;
+}
+export const medianPitch = (x) => percentile(pitches(x), 0.5);
 
 // Syllables in a text, from its vowel groups: the unit a listener hears pace in, across languages written in Latin
 // letters ("ber-lum-pur" is 3).
@@ -848,7 +902,7 @@ export async function speak(script, out, opts = {}) {
     result = { duration: r.duration, phrases: r.phrases, engine: /kokoro/i.test(model) ? `Kokoro (${voice})` : model };
   }
   // The whole file is transcribed back once: a problem is reported, since these engines keep no per-phrase takes.
-  const c = await heardCheck(out, spoken(script), opts.language);
+  const c = await heardCheck(out, sayable(script), opts.language);
   return { ...result, checks: [{ at: 0, text: spoken(script), ok: c.ok, heard: c.heard, why: c.why, doubt: c.doubt ?? [] }], problems: c.ok ? [] : [`${c.why}. Heard: "${c.heard}".`] };
 }
 
