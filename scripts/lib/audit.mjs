@@ -390,7 +390,9 @@ export function auditArc(cueLog, samples, duration, mix = samples) {
   const body = levelDb(mix, 0, mix.length);
   const head = levelDb(mix, 0, 0.04 * SR);
   const tail = levelDb(mix, mix.length - 0.04 * SR, mix.length);
-  if (body > -70 && head > body - 6) findings.push({ level: 'fail', msg: `The soundtrack starts on a hard edge (first 40 ms at ${head.toFixed(1)} dB against ${body.toFixed(1)} dB overall). Set "sound.fadeIn".` });
+  // A voice that starts at 0 s is the edge: a fade would swallow its first word, so it starts a moment later instead.
+  const voiceAtZero = (cueLog.voice ?? []).some((v) => v.start <= 0.05);
+  if (body > -70 && head > body - 6) findings.push({ level: 'fail', msg: `The soundtrack starts on a hard edge (first 40 ms at ${head.toFixed(1)} dB against ${body.toFixed(1)} dB overall). ${voiceAtZero ? 'The voice starts at 0 s: set "voiceover": { "start": 0.3 } and lengthen the first scene by 0.3 s. A fade-in would fade its first word.' : 'Set "sound.fadeIn".'}` });
   if (body > -70 && tail > body - 6) findings.push({ level: 'fail', msg: `The soundtrack stops on a hard edge (last 40 ms at ${tail.toFixed(1)} dB against ${body.toFixed(1)} dB overall). Set "sound.fadeOut", or hold the end card longer.` });
   // An effect whose dry sound runs past the end is cut, not resolved.
   const fadeOut = cueLog.sound?.fadeOut ?? 0;
