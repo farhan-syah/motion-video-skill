@@ -106,6 +106,13 @@ export async function transcribe(file, { model = DEFAULT_MODEL, language } = {})
       words.push({ text, start: Math.min(s, duration), end: Math.min(Math.max(e, s), duration) });
     }
   }
+  // A recognizer invents words in digital silence (a "you" after the last line). A word whose whole span stays under
+  // -50 dBFS was never spoken.
+  words = words.filter((w) => {
+    let peak = 0;
+    for (let i = Math.floor(w.start * 16000), end = Math.min(pcm.length, Math.ceil(w.end * 16000)); i < end; i++) peak = Math.max(peak, Math.abs(pcm[i]));
+    return peak > 10 ** (-50 / 20);
+  });
   const looped = collapseLoops(words);
   words = looped.words;
   snapOnsets(words, env);
