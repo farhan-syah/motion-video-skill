@@ -218,7 +218,8 @@ export async function muxAudio(video, out, { voice = [], sfx = [], music = null,
   // The limiter lowers integrated loudness on peaky mixes, so the gain is re-measured after limiting and corrected.
   // The target never outranks the arc. The limiter may trim brief peaks, but the gain stops rising before the loudest
   // moment (400 ms momentary loudness) loses more than LEAD_LOSS_DB of its lead over the rest of the mix. A sparse mix that
-  // cannot reach the target within that ships quieter, so the payoff keeps its contrast.
+  // cannot reach the target within that ships quieter, so the payoff keeps its contrast. A narrated mix always reaches
+  // the target: the voice carries it, and a quieter file only makes the words harder to hear.
   let limitDb = ceilingDb - 0.5;
   const peakIn = Number(m.input_tp);
   const probe = async (g) => {
@@ -248,7 +249,7 @@ export async function muxAudio(video, out, { voice = [], sfx = [], music = null,
       }
       return lo;
     };
-    gainMax = await search(async (g) => (await probe(g)).lead >= base.lead - LEAD_LOSS_DB);
+    if (!voice.length) gainMax = await search(async (g) => (await probe(g)).lead >= base.lead - LEAD_LOSS_DB);
     const reach = await search(async (g) => (await probe(g)).i <= targetI);
     gainDb = Math.min(reach, gainMax);
   } else {
