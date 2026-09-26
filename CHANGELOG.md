@@ -8,15 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
+- `speak` flags a VoxCPM2 part whose pitch swings far above the voice's usual pitch.
+- `{written|spoken}` script syntax: captions show the written form, and the voice says the spoken form.
 - `doctor` says when a sandbox may hide the browser and the GPU.
 - The sound intent error names the intents the sound fits and the sounds that fit the intent.
 
 ### Changed
 
+- The VoxCPM2 guide states how delivery notes and energy words change the voice.
 - Palette rules name where a generated palette drifts, and ask for three candidate palettes before choosing one.
 
 ### Fixed
 
+- `narration.md` states the file names `transcribe` writes.
 - `transcribe` drops words a recognizer invents in digital silence.
 - The audit measures an appearance over the element's whole box, so text scaling into place no longer marks a correctly placed sound as early.
 - The palette guidance no longer gives genre example palettes.
