@@ -25,3 +25,9 @@ test('English years, counts and plain numbers read as their values', () => {
 test('digits read as numbers', () => {
   assert.deepEqual(writtenNumbers('1 Februari 1974, 13.5 km, 1,896 people'), [1, 1974, 13.5, 1896]);
 });
+
+test('halves and decimals read as their values', () => {
+  assert.deepEqual(spokenNumbers('boleh tampung tiga setengah liter air'), [3.5]);
+  assert.deepEqual(spokenNumbers('tiga perpuluhan lima kilometer'), [3.5]);
+  assert.deepEqual(spokenNumbers('three and a half litres, or three point five'), [3.5, 3.5]);
+});

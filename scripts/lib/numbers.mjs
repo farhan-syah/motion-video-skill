@@ -130,6 +130,24 @@ export function spokenNumbers(text) {
       i++;
       continue;
     }
+    // A fraction or decimal after a number: "tiga setengah" and "three and a half" are 3.5, "tiga perpuluhan lima"
+    // and "three point five" are 3.5.
+    const after = a.next;
+    if (t[after] === 'setengah' || (t[after] === 'and' && t[after + 1] === 'a' && t[after + 2] === 'half')) {
+      out.push(a.value + 0.5);
+      i = after + (t[after] === 'setengah' ? 1 : 3);
+      continue;
+    }
+    if (['perpuluhan', 'point', 'koma'].includes(t[after])) {
+      const digits = [];
+      let k = after + 1;
+      while (k < t.length && t[k] in UNITS) digits.push(UNITS[t[k++]]);
+      if (digits.length) {
+        out.push(Number(`${a.value}.${digits.join('')}`));
+        i = k;
+        continue;
+      }
+    }
     const zero = ['oh', 'kosong'].includes(t[a.next]);
     const b = a.small && a.value >= 10 ? readNumber(t, zero ? a.next + 1 : a.next) : null;
     if (b && b.small && (zero ? b.value < 10 : b.value >= 10)) {
@@ -149,8 +167,12 @@ export function writtenNumbers(text) {
 }
 
 // A word that is part of a number spoken as words.
-const NUMBER_WORDS = new Set([...Object.keys(UNITS), ...Object.keys(TEENS), ...Object.keys(TENS), ...Object.keys(SCALE_MS), ...Object.keys(ONE_MS), ...Object.keys(SCALE_EN), 'and']);
+const NUMBER_WORDS = new Set([...Object.keys(UNITS), ...Object.keys(TEENS), ...Object.keys(TENS), ...Object.keys(SCALE_MS), ...Object.keys(ONE_MS), ...Object.keys(SCALE_EN), 'and', 'setengah', 'perpuluhan', 'koma', 'point', 'half']);
 export const isNumberWord = (w) => /\d/.test(w) || tokens(w).every((t) => NUMBER_WORDS.has(t));
 
 // All numbers in a text, spoken or written, sorted: the multiset two texts must share.
-export const numbersIn = (text) => [...spokenNumbers(text), ...writtenNumbers(text)].sort((a, b) => a - b);
+// A recognizer can space a decimal out ("3 .5"): it is one number.
+export const numbersIn = (text) => {
+  const t = text.replace(/(\d)\s+([.,])\s*(\d)/g, '$1$2$3');
+  return [...spokenNumbers(t), ...writtenNumbers(t)].sort((a, b) => a - b);
+};
