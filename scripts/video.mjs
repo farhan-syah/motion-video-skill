@@ -26,14 +26,17 @@ Commands:
                                  Draw a map from Natural Earth outlines: countries, highlights, pins, great-circle routes.
                                  --land replaces the outlines with precise polygons, --layer draws lines and areas.
                                  Default size: the manifest's. --countries lists every country name.
-  speak TEXT|FILE [--engine kokoro|voxcpm] [--voice V] [--reference WAV] [--speed S]
+  speak TEXT|FILE [--engine kokoro|voxcpm] [--voice V] [--reference WAV] [--speed S] [--seed N] [--reroll 3,7]
+        [--language L]
         [--model HF_ID | --command "TEMPLATE"] [--out WAV]
                                  Narration from a script. Writes the WAV and its script next to it (default
                                  assets/voiceover.wav and .txt). Engine: --command runs any TTS with {text},
-                                 {text_file}, {out} and {voice}; --engine voxcpm runs VoxCPM2 (30 languages, voice
+                                 {text_file}, {out}, {voice} and {reference}; --engine voxcpm runs VoxCPM2 (30 languages, voice
                                  design with --voice "(description)", cloning with --reference; NVIDIA GPU, 8 GB);
                                  --model runs a transformers.js TTS model; the default is Kokoro (local, English).
-                                 "tts" in ~/.config/motion-video/config.json sets defaults.
+                                 "tts" in ~/.config/motion-video/config.json sets defaults. Every take is heard
+                                 back with Whisper (--language sets its language). VoxCPM2 regenerates a sentence
+                                 with extra or missing speech under a new seed. It exits 1 when a problem remains.
   transcribe [FILE ...] [--model M] [--language L] [--script TXT]
                                  Word-level timestamps for narration, from a local Whisper model. With no FILE: the
                                  manifest's voiceover and every scene audio. Writes out/voice/<name>.words.json and
@@ -72,7 +75,7 @@ function num(flag, v, min) {
 }
 
 function parseArgs(argv) {
-  const opts = { manifest: 'video.json', scene: null, draft: false, force: false, scale: 1, jobs: null, start: null, name: null, subset: null, model: null, language: null, script: null, voice: null, speed: null, out: null, command: null, engine: null, reference: null, device: null, fit: null, bbox: null, highlight: null, pin: [], route: [], layer: [], land: null, detail: null, size: null, countries: false, from: null, to: null, fps: null, width: null, rest: [] };
+  const opts = { manifest: 'video.json', scene: null, draft: false, force: false, scale: 1, jobs: null, start: null, name: null, subset: null, model: null, language: null, script: null, voice: null, speed: null, seed: null, reroll: null, out: null, command: null, engine: null, reference: null, device: null, fit: null, bbox: null, highlight: null, pin: [], route: [], layer: [], land: null, detail: null, size: null, countries: false, from: null, to: null, fps: null, width: null, rest: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--manifest') opts.manifest = argv[++i];
@@ -89,6 +92,8 @@ function parseArgs(argv) {
     else if (a === '--script') opts.script = argv[++i];
     else if (a === '--voice') opts.voice = argv[++i];
     else if (a === '--speed') opts.speed = num(a, argv[++i], 0.5);
+    else if (a === '--seed') opts.seed = num(a, argv[++i], 0);
+    else if (a === '--reroll') opts.reroll = argv[++i].split(',').map((v) => Number(v.trim()));
     else if (a === '--out') opts.out = argv[++i];
     else if (a === '--command') opts.command = argv[++i];
     else if (a === '--engine') opts.engine = argv[++i];
@@ -279,22 +284,51 @@ async function speakCmd(opts) {
   const { speak } = await import('./lib/speak.mjs');
   const arg = opts.rest.join(' ').trim();
   if (!arg) throw new ManifestError('speak needs the script: a text file, or the words in quotes.');
-  const script = existsSync(arg) ? readFileSync(arg, 'utf8').trim() : arg;
+  const raw = existsSync(arg) ? readFileSync(arg, 'utf8').trim() : arg;
+  // A script with times per line ("0-5s: …", "[00:05] …") places each line at its time. Its stamps are not spoken.
+  const { parseTimedScript } = await import('./lib/subtitles.mjs');
+  const cues = parseTimedScript(raw);
+  const script = cues ? cues.map((c) => c.text).join('\n') : raw;
   const out = resolve(opts.out ?? 'assets/voiceover.wav');
   mkdirSync(dirname(out), { recursive: true });
-  const { duration, engine } = await speak(script, out, {
+  const { duration, engine, problems = [], phrases, checks = [], timing = [] } = await speak(script, out, {
     voice: opts.voice ?? undefined, speed: opts.speed ?? undefined, model: opts.model ?? undefined, command: opts.command ?? undefined,
     engine: opts.engine ?? undefined, reference: opts.reference ? resolve(opts.reference) : undefined, device: opts.device ?? undefined,
+    seed: opts.seed ?? undefined, language: opts.language ?? undefined, cues: cues ?? undefined, reroll: opts.reroll ?? undefined,
   });
+  // Pace: an explainer reads best around 4.5-5.5 syllables a second while speaking. Faster tires the listener.
+  const { pace } = await import('./lib/speak.mjs');
+  const rate = phrases ? pace(phrases) : null;
+  if (rate) console.log(`Pace: ${rate.toFixed(1)} syllables per second while speaking${rate > 5.5 ? `, fast for an explainer: run again with --speed ${Math.max(0.75, Math.round((5 / rate) * 20) / 20)}` : rate < 3.6 ? ', slow: try --speed 1.1' : ''}.`);
+  if (cues) {
+    console.log(`Timed script: ${cues.length} lines placed at their times.`);
+    for (const t of timing) console.log(`  ${t}`);
+  }
   const txt = out.replace(/\.[^./]+$/, '.txt');
-  writeFileSync(txt, `${script}\n`);
+  // Captions and transcribe read the words as spoken: the pause marks stay only in the source script.
+  const { spoken } = await import('./lib/speak.mjs');
+  writeFileSync(txt, `${spoken(script)}\n`);
+  // Where each phrase sits in the audio: transcribe keeps every word inside its own phrase.
+  const { phrasesFile } = await import('./lib/voice.mjs');
+  if (phrases) writeFileSync(phrasesFile(out), JSON.stringify({ script: spoken(script), phrases }, null, 1));
+  else rmSync(phrasesFile(out), { force: true });
   const rel = (f) => relative(process.cwd(), f);
   console.log(`${rel(out)} (${duration.toFixed(2)}s, ${engine}) and its script ${rel(txt)}
 Next: set "voiceover": { "file": "${rel(out)}", "script": "${rel(txt)}" } in video.json, then run transcribe.`);
+  // Every phrase as it was heard back, so a wrong word shows even when the check passes it.
+  console.log('\nHeard back, phrase by phrase:');
+  for (const c of checks) console.log(`  ${c.ok ? 'ok  ' : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}`);
+  if (problems.length) {
+    console.log(`\nThe speech check found ${problems.length} problem(s), heard back with Whisper:`);
+    for (const p of problems) console.log(`  ${p}`);
+    return 1;
+  }
+  console.log('Speech check: every phrase was heard back as written.');
+  return 0;
 }
 
 async function transcribeCmd(m, opts) {
-  const { transcribe, wordsFile, narrations, alignScript, DEFAULT_MODEL } = await import('./lib/voice.mjs');
+  const { transcribe, wordsFile, narrations, alignScript, alignPhrases, phrasesFile, fitFile, asrModel } = await import('./lib/voice.mjs');
   const list = opts.rest.length ? opts.rest.map((f) => ({ file: resolve(f), at: 0, where: 'file' })) : narrations(m);
   if (opts.script) {
     if (list.length !== 1) throw new ManifestError(`transcribe --script: ${list.length} narrations to read, and one script. Pass one FILE, or set "script" per narration in video.json.`);
@@ -304,13 +338,23 @@ async function transcribeCmd(m, opts) {
   if (!list.length) throw new ManifestError('transcribe: no narration to read. Set "voiceover" or a scene "audio" in video.json, or pass a file.');
   for (const n of list) {
     if (!existsSync(n.file)) throw new ManifestError(`transcribe: ${n.file} does not exist.`);
-    const { config } = await import('./lib/paths.mjs');
-    const t = await transcribe(n.file, { model: opts.model ?? config().asr?.model ?? DEFAULT_MODEL, language: opts.language ?? undefined });
+    const t = await transcribe(n.file, { model: opts.model ?? asrModel(opts.language), language: opts.language ?? undefined });
     // A known script replaces the recognized spelling: captions show the exact words, on the recognized timings.
     // The recognized words stay in "heard", for a round trip against the script.
     if (n.script) {
       t.heard = t.words;
-      t.words = alignScript(t.words, readFileSync(n.script, 'utf8'));
+      // Words align phrase by phrase when the phrase times are known: from subtitles (an .srt or .vtt script), or from
+      // the spans speak recorded for this same script. Script words spread across a gap can land in a pause: each then
+      // starts where its sound does. Pause marks in a plain script are not words.
+      const { readScript } = await import('./lib/subtitles.mjs');
+      const { spoken } = await import('./lib/speak.mjs');
+      const src = readScript(n.script);
+      const script = spoken(src.text);
+      const pf = phrasesFile(n.file);
+      const recorded = !src.phrases && existsSync(pf) ? JSON.parse(readFileSync(pf, 'utf8')) : null;
+      const phrases = src.phrases ?? (recorded && recorded.script.replace(/\s+/g, ' ').trim() === script ? recorded.phrases : null);
+      t.words = phrases ? fitFile(alignPhrases(t.words, phrases), n.file, phrases) : fitFile(alignScript(t.words, script), n.file);
+      if (phrases) t.phrases = src.phrases ? n.script : pf;
       t.script = n.script;
     }
     const out = wordsFile(m, n.file);
@@ -619,9 +663,12 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs }, op
   });
   const whole = scenes.length === m.scenes.length;
   const dir = m.sound;
+  // The fade-in lifts the mix off silence. It ends before the first sound starts, so an opening hit or the first
+  // syllable plays at full level instead of rising out of the fade.
+  const firstSound = Math.min(Infinity, ...sfx.map((c) => c.at), ...voice.map((v) => Math.max(0, v.at)));
   const direction = {
     room: sfx.some((c) => c.space > 0) ? { ir: impulseFile(dir.space), wet: SPACES[dir.space].wet } : null,
-    fadeIn: whole ? dir.fadeIn : 0.05,
+    fadeIn: Math.min(whole ? dir.fadeIn : 0.05, Math.max(0.02, firstSound)),
     fadeOut: whole ? dir.fadeOut : 0.05,
   };
   const output = whole ? m.output : join(m.outDir, `${scenes[0].name}.mp4`);
@@ -910,8 +957,7 @@ async function main() {
     return 0;
   }
   if (cmd === 'speak') {
-    await speakCmd(opts);
-    return 0;
+    return speakCmd(opts);
   }
   if (cmd === 'footage') {
     footage(opts);
@@ -930,9 +976,10 @@ async function main() {
     await transcribeCmd({ outDir: resolve('out') }, opts);
     return 0;
   }
-  const m = loadManifest(opts.manifest);
+  const m = loadManifest(opts.manifest, { voiceoverFits: cmd !== 'transcribe' });
   if (cmd === 'transcribe') {
     await transcribeCmd(m, opts);
+    if (m.voiceoverOverrun > 0) console.log(`The voiceover runs ${m.voiceoverOverrun.toFixed(2)}s past the video's end. Size the scenes to its words above, so the video holds all of it.`);
     return 0;
   }
   if (cmd === 'sheet') {

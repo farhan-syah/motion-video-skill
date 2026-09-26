@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { alignScript, findPhrase } from './voice.mjs';
+import { alignScript, checkSpeech, findPhrase } from './voice.mjs';
 
 const words = [
   { text: 'iscribe', start: 0.5, end: 1.0 },
@@ -60,4 +60,59 @@ test('numbers match only exactly: 1985 is not 1982', () => {
   ];
   assert.equal(findPhrase(years, '1985').start, 5.3);
   assert.equal(findPhrase(years, '1990'), null);
+});
+
+test('a number spoken as words shares the time of the digits the recognizer wrote', () => {
+  const heard = [
+    { text: 'Pada', start: 6.2, end: 6.5 },
+    { text: 'tahun', start: 6.5, end: 7.0 },
+    { text: '1857,', start: 7.08, end: 7.97 },
+    { text: 'Raja', start: 8.2, end: 8.5 },
+  ];
+  const out = alignScript(heard, 'Pada tahun lapan belas lima puluh tujuh, Raja');
+  const num = out.slice(2, 7);
+  assert.equal(num[0].start, 7.08);
+  assert.equal(num[4].end, 7.97);
+  for (const w of num) assert.ok(w.end - w.start > 0.1, `${w.text} has a real span`);
+  assert.equal(out[7].start, 8.2);
+});
+
+test('a take with babble after its sentence fails, and a clean take with digits passes', () => {
+  const clean = [
+    { text: 'Pada', start: 0, end: 0.3 },
+    { text: 'tahun', start: 0.3, end: 0.6 },
+    { text: '1857,', start: 0.6, end: 1.5 },
+    { text: 'Raja', start: 1.6, end: 1.9 },
+    { text: 'Abdullah.', start: 1.9, end: 2.4 },
+  ];
+  const sentence = 'Pada tahun lapan belas lima puluh tujuh, Raja Abdullah.';
+  assert.equal(checkSpeech(clean, sentence).ok, true);
+  const babble = [...clean, { text: 'marbulan', start: 2.6, end: 3.1 }, { text: 'nambar', start: 3.1, end: 3.6 }];
+  const r = checkSpeech(babble, sentence);
+  assert.equal(r.ok, false);
+  assert.match(r.why, /extra speech "marbulan nambar"/);
+  assert.equal(checkSpeech(clean.slice(0, 2), sentence).ok, false, 'a take cut short misses words');
+});
+
+test('a take that says the wrong year, or slips words in beside a number, fails', () => {
+  const heard = (t) => t.split(' ').map((text, i) => ({ text, start: i * 0.4, end: i * 0.4 + 0.35 }));
+  const sentence = 'Masuk tahun lapan belas sembilan puluh enam, Kuala Lumpur jadi ibu kota.';
+  assert.equal(checkSpeech(heard('Masuk tahun 1896, Kuala Lumpur jadi ibu kota.'), sentence).ok, true);
+  const wrong = checkSpeech(heard('Masuk tahun 1860, Kuala Lumpur jadi ibu kota.'), sentence);
+  assert.match(wrong.why, /numbers heard as 1860, the script says 1896/);
+  const stray = checkSpeech(heard('Tahun 1880, saya nampak ibu negeri Selangor dipindah.'), 'Tahun lapan belas lapan puluh, ibu negeri Selangor dipindah.');
+  assert.match(stray.why, /extra speech "saya nampak/);
+});
+
+test('a take heard as something else fails, even when a number turns up in it', () => {
+  const heard = (t) => t.split(' ').map((text, i) => ({ text, start: i * 0.4, end: i * 0.4 + 0.35 }));
+  assert.equal(checkSpeech(heard('40 buta'), 'Eh, korang tahu tak?').ok, false);
+  assert.equal(checkSpeech(heard('Saya jadi bijeh timah.'), 'nak cari bijih timah.').ok, false);
+  assert.equal(checkSpeech(heard('Kuala yang belum po.'), 'kuala yang berlumpur.').ok, true, 'one misheard word in three passes');
+});
+
+test('a long spoken number does not carry a garbled phrase', () => {
+  const heard = (t) => t.split(' ').map((text, i) => ({ text, start: i * 0.4, end: i * 0.4 + 0.35 }));
+  assert.equal(checkSpeech(heard('saya baru lewat tahun 1857.'), 'Semuanya bermula tahun lapan belas lima puluh tujuh.').ok, false);
+  assert.equal(checkSpeech(heard('Semuanya bermula tahun 1857.'), 'Semuanya bermula tahun lapan belas lima puluh tujuh.').ok, true);
 });

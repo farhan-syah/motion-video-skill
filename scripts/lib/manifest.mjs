@@ -26,7 +26,9 @@ export function probeDuration(file) {
   return d;
 }
 
-export function loadManifest(manifestPath) {
+// voiceoverFits: false lets a voiceover run past the video's end (transcribe needs the new words to size the scenes).
+// The overrun is then reported in `voiceoverOverrun` (seconds) instead of failing.
+export function loadManifest(manifestPath, { voiceoverFits = true } = {}) {
   const path = resolve(manifestPath);
   if (!existsSync(path)) throw new ManifestError(`${path} not found. Run "init <dir>" or pass the manifest path.`);
   let raw;
@@ -136,18 +138,21 @@ export function loadManifest(manifestPath) {
     music = { file, volume, start };
   }
 
-  // One narration for the whole video (a TTS file, a recorded voiceover): "voiceover": "vo.wav" or
-  // { "file": "vo.wav", "start": 0.5 }, start in video seconds. Per-scene "audio" stays for narration cut per scene.
+  // One narration for the whole video (a TTS file, a recording, or a video file's sound): "voiceover": "vo.wav" or
+  // { "file": "vo.wav", "start": 0.5, "script": "vo.txt" }, start in video seconds, script as text or subtitles. Per-scene "audio" stays for narration cut per scene.
   let voiceover = null;
+  let voiceoverOverrun = 0;
   if (raw.voiceover != null) {
     const spec = typeof raw.voiceover === 'string' ? { file: raw.voiceover } : raw.voiceover;
     const file = resolve(root, spec.file ?? '');
     if (!spec.file || !existsSync(file)) fail(path, `"voiceover" file ${file} does not exist.`);
     const at = spec.start ?? 0;
-    if (typeof at !== 'number' || at < 0) fail(path, `"voiceover.start" is ${at}. Use video seconds, 0 or more.`);
+    // A negative start skips the file's first seconds (a count-in, dead air before the first word).
+    if (typeof at !== 'number' || !Number.isFinite(at)) fail(path, `"voiceover.start" is ${JSON.stringify(at)}. Use video seconds: 0.5 starts it half a second in, -2 skips its first 2 seconds.`);
     const duration = probeDuration(file);
     const total = Math.round(start * fps) / fps;
-    if (at + duration > total + 0.01) fail(path, `"voiceover" runs to ${(at + duration).toFixed(2)}s, past the video's end at ${total.toFixed(2)}s. Lengthen the scenes or start it earlier.`);
+    if (at + duration > total + 0.01 && !voiceoverFits) voiceoverOverrun = at + duration - total;
+    else if (at + duration > total + 0.01) fail(path, `"voiceover" runs to ${(at + duration).toFixed(2)}s, past the video's end at ${total.toFixed(2)}s: the scenes need ${(at + duration - total + 0.5).toFixed(2)}s more (with a 0.5s tail). Run transcribe (it reads the narration anyway), size each scene to its words, then check again.`);
     let script = null;
     if (spec.script != null) {
       script = resolve(root, spec.script);
@@ -158,6 +163,7 @@ export function loadManifest(manifestPath) {
 
   return {
     path,
+    voiceoverOverrun,
     root,
     width,
     height,

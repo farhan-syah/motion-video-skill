@@ -82,7 +82,7 @@ export async function doctor(root) {
   say('model folder', `${models}${existsSync(configFile()) ? `  (from ${configFile()})` : ''}`);
   const have = (id) => existsSync(join(models, ...id.split('/')));
   const whisper = existsSync(join(models, 'onnx-community')) ? readdirSync(join(models, 'onnx-community')).filter((d) => d.startsWith('whisper')) : [];
-  say('whisper', whisper.length ? whisper.join(', ') : 'none yet: transcribe downloads whisper-base (about 280 MB)');
+  say('whisper', whisper.length ? whisper.join(', ') : 'none yet: transcribe downloads whisper-base (about 75 MB), and whisper-small (about 240 MB) for other languages');
   say('kokoro model', have('onnx-community/Kokoro-82M-v1.0-ONNX') ? 'ready' : 'downloads on first speak (about 90 MB)');
   const { voxcpmCheckpoint, voxcpmReady } = await import('./speak.mjs');
   const vox = voxcpmReady();

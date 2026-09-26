@@ -605,6 +605,7 @@
 /*
  * Captions: a word-synced line from the narration (motion.js, data-captions). The spoken word sits on a pill.
  * --captions-y: distance from the bottom. --caption-on: pill color. --caption-ink: text color on the pill.
+ * --caption-edge: the solid outline that keeps white words readable on any frame, light or dark.
  */
 .captions {
   position: absolute;
@@ -618,7 +619,8 @@
   line-height: 1.25;
   letter-spacing: -0.01em;
   color: #fff;
-  -webkit-text-stroke: 0.08em rgb(0 0 0 / 0.55);
+  /* Painted under the fill, so half of it shows: a 0.08em solid edge. */
+  -webkit-text-stroke: 0.16em var(--caption-edge, #111);
   paint-order: stroke fill;
   pointer-events: none;
   z-index: 30;
