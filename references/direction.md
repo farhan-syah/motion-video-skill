@@ -21,6 +21,7 @@ Everything the video claims is a fact from the user or from the product itself. 
 - **Read every supplied image.** List its components, copy, colors and layout. A design reference is a component library to rebuild, not a picture to paste.
 - **Sample the palette** from the logo and screenshots. Use exact hex values. Add one neutral dark and one neutral light.
 - **No brand colors:** derive the palette from the product's own world, never from a genre default.
+  - **A reference video:** when the user shares an example ("like this"), take what they point at: its format, pacing, caption style, devices such as maps and timelines. Take its palette and type only when they ask for its look. Otherwise the palette comes from this subject's own world, so two videos made from one reference do not look alike.
   - **Source:** the product's world and its material. Film suggests warm cream, amber and deep brown. Paper suggests off-white and ink. A garden suggests greens and soil.
   - **Light or dark:** decide it for this product and write the reason in `direction.md`. Light frames read open and friendly. Dark frames read cinematic and focused.
   - **Accent:** one hue that belongs to the product's character, not the category. A near-black frame with a neon cyan accent is the stock look of every "tech" video. Use it only when the brand itself is that.
@@ -72,14 +73,15 @@ The story shape sets the order of beats. Every shape keeps three anchors:
 | Anchor | Job |
 |---|---|
 | Hook | A strong image or line in the first 2 s. Motion from frame 0. No logo-first intros. |
-| Payoff | The result made visible, or a before/after. A number only when the brief supplies it. |
+| Payoff | The result made visible, or a before/after. A number only from the gathered facts. |
 | End card | Logo, promise line, CTA button. Holds still for at least 1.5 s of reading. |
 
 - **Beats:** 1.5–4 s each, 10–15 in a 30 s teaser. See `concepts.md` for pacing and compositions.
 
 - **Logo:** it appears on the end card. When the brief asks to show the logo, also reveal it as a lockup right after the hook, never as the opening frame.
 - **Music cuts:** snap every cut to a downbeat from `out/beats.json`, and put the payoff on the biggest energy hit.
-- **No music:** plan a `data-sfx` cue for each verb moment the eye follows. Most camera moves stay silent.
+- **Narration cuts:** with a voice, the words set the clock. Size each beat to the phrases it plays under, and cut in the pauses between them. A script with times per line sets the beats to those times.
+- **No music:** plan a `data-sfx` cue for each verb moment the eye follows. Most camera moves stay silent. Under narration, keep effects to the pauses and the moments with no speech.
 - **Each sound is chosen, not assigned.** Pick every sound for this moment in this world: what makes the noise, how big it is on screen, how long it lasts. No story role (hook, payoff, logo, end card) has a fixed sound. A payoff can land on a tonal phrase, a material hit, a texture swell, a cinematic impact, or silence. The concept decides.
 - **Shape follows motion.** A landing is a short hit. A long move is a sustained sound that spans it. A transformation is a phrase that changes as it does. A run of short transients reads as dots. Mix short, sustained, tonal and textured sounds across the video.
 - **Beyond the catalog:** when no catalog sound fits, supply one with `data-sfx-src` (a user file, or one made with any sound tool).
@@ -144,6 +146,7 @@ Add cue times: each sub-action starts on a beat, 2–4 beats apart.
   - **Caption track:** one narration line per beat along the bottom, with the key word in the accent.
   - **Statements:** big centered lines that change size and place with each beat's composition.
   - **Chapter headlines:** a parallel two-line pattern in a fixed `.hud` slot, with a label such as "03 · DIRECT". Mark each with `data-headline`, so `check` holds it to the slot. It fits a chaptered explainer, and it is not the default.
+- **Under narration:** the voice carries the sentences. The screen shows what the ear cannot hold: the key word, the number, the name, the place, a word-synced caption track. Never a second copy of the whole script.
 - **Headlines:** at most 6 words, one idea.
 - **Captions:** one per feature, on a card at the top or bottom. Never on top of the action.
 - **Reading time:** every line stays readable for at least words ÷ 3 seconds.

@@ -57,7 +57,7 @@ The project folder holds everything: `direction.md`, `scenes/`, `video.json`, an
 
 **Sound:** no music is ever added unless you supply it. Without music, the video gets motion sound effects: each effect is bound to the element whose motion makes it.
 
-**Voiceover:** give it a recorded narration, a TTS file, or just a script. It speaks English locally out of the box, speaks 30 languages with VoxCPM2 when your NVIDIA GPU has 8 GB, and plugs into any TTS you already use. A local Whisper model times every word. Word-synced captions highlight each word as it is spoken, scenes follow the speech, and `check` fails any line that is off screen while its words are spoken.
+**Voiceover:** give it your own recording, a TTS file, subtitles, or just a script, plain or with times per line (`0-5s: …`). Your words and your voice are used as given. It speaks English locally out of the box, speaks 30 languages with VoxCPM2 when your NVIDIA GPU has 8 GB, and plugs into any TTS you already use. A local Whisper model times every word. Word-synced captions highlight each word as it is spoken, scenes follow the speech, and `check` fails any line that is off screen while its words are spoken.
 
 **Maps:** real country outlines, pins and animated routes, from Natural Earth data.
 
