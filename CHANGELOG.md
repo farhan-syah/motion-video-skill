@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `doctor` says when a sandbox may hide the browser and the GPU.
+
 ## [1.2.0] - 2026-09-26
 
 ### Added

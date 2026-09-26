@@ -126,6 +126,8 @@ export async function doctor(root) {
   say('kokoro model', have('onnx-community/Kokoro-82M-v1.0-ONNX') ? 'ready' : 'downloads on first speak (about 90 MB)');
   const { voxcpmCheckpoint, voxcpmReady } = await import('./speak.mjs');
   const vox = voxcpmReady();
+  // In a sandbox or container, the browser and the GPU can be hidden while the machine has both.
+  if (failed && !vox.ok) limits.push('the browser did not start and no usable NVIDIA GPU was found. Inside a sandbox or container, doctor sees that environment, not the machine: run it again with host access before planning around these limits.');
   const uv = first('uv', ['--version']);
   say('uv', uv ?? 'not found: VoxCPM2 and PyTorch-only --model voices need it to build their Python environment (https://docs.astral.sh/uv)');
   say('cpu voices', uv ? '--model <id> runs a Hugging Face TTS model on the CPU, one whose license allows the video\'s use (references/tts/huggingface.md). First run builds a 1.1 GB Python environment' : 'English only (Kokoro). Install uv to run Hugging Face TTS models (https://docs.astral.sh/uv)');
