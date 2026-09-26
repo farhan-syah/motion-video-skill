@@ -68,6 +68,14 @@ function collectText(short) {
     return m;
   };
   const overlapOk = (el) => !!el.closest('[data-overlap-ok]');
+  // The screen box an inset() clip leaves visible: inset(top right bottom left), in px or % of the element's box.
+  const insetRect = (e, clipPath) => {
+    const r = e.getBoundingClientRect();
+    const v = clipPath.slice(6).split(/\s+round\s+|\)/)[0].trim().split(/\s+/);
+    const [t, rt = t, b = t, l = rt] = v;
+    const px = (s, size) => (s.endsWith('%') ? (parseFloat(s) / 100) * size : parseFloat(s) || 0);
+    return { left: r.left + px(l, r.width), top: r.top + px(t, r.height), right: r.right - px(rt, r.width), bottom: r.bottom - px(b, r.height) };
+  };
   // Opaque content painted above the text at a point: anything but the text's own subtree and ancestors.
   const coveredAt = (el, x, y) => {
     for (const top of document.elementsFromPoint(x, y)) {
@@ -94,10 +102,10 @@ function collectText(short) {
       const cs = getComputedStyle(e);
       if (cs.display === 'none' || cs.visibility === 'hidden') hidden = true;
       mat = own(cs).multiply(mat);
-      if (e !== el && (cs.overflowX !== 'visible' || cs.overflowY !== 'visible' || cs.clipPath !== 'none')) {
-        const r = e.getBoundingClientRect();
-        clip = { l: Math.max(clip.l, r.left), t: Math.max(clip.t, r.top), r: Math.min(clip.r, r.right), b: Math.min(clip.b, r.bottom) };
-      }
+      // An inset clip (a wipe entrance or exit) hides part of the box, on the text itself or on any ancestor.
+      const inset = /^inset\(/.test(cs.clipPath) ? insetRect(e, cs.clipPath) : null;
+      const r = inset ?? (e !== el && (cs.overflowX !== 'visible' || cs.overflowY !== 'visible' || cs.clipPath !== 'none') ? e.getBoundingClientRect() : null);
+      if (r) clip = { l: Math.max(clip.l, r.left), t: Math.max(clip.t, r.top), r: Math.min(clip.r, r.right), b: Math.min(clip.b, r.bottom) };
     }
     const opacity = effOpacity(el);
     if (hidden || opacity < 0.02) continue;
@@ -148,7 +156,9 @@ function collectText(short) {
       probe = { l: Math.max(box.l, r.left), t: Math.max(box.t, r.top), r: Math.min(box.r, r.right), b: Math.min(box.b, r.bottom) };
     }
     if (opacity >= 0.5 && probe.r - probe.l >= 1 && probe.b - probe.t >= 1) {
-      for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.35], [0.75, 0.35], [0.25, 0.65], [0.75, 0.65]]) {
+      // 15 probes across the glyph box: a dot grid or a card over part of a label hides it, though most probes of a
+      // sparse grid would miss. Three covered probes (a fifth of the text) count as covered.
+      for (const [fx, fy] of [0.1, 0.3, 0.5, 0.7, 0.9].flatMap((x) => [0.3, 0.5, 0.7].map((y) => [x, y]))) {
         const hit = coveredAt(el, probe.l + (probe.r - probe.l) * fx, probe.t + (probe.b - probe.t) * fy);
         if (hit && world && hit.closest('.hud')) underHud++;
         else if (hit) {
@@ -187,7 +197,7 @@ function collectText(short) {
       caption: !!el.closest('[data-captions]'),
       world,
       hud,
-      underHud: underHud >= 3,
+      underHud: underHud >= 8,
       occluded: covered >= 3 && !overlapOk(el) ? coverer : null,
       px: (parseFloat(cs.fontSize) * sy) / short,
       // Screen scale of the text from its transform chain: above 1 means a camera push or zoom enlarges it.
@@ -223,11 +233,14 @@ function describeAnimations() {
     // (a -50% centering), the motion swings through that offset, so the element jumps sideways during it.
     let ownTranslate = null;
     if (el && ['rise', 'drop', 'left', 'right', 'reveal', 'sink-out', 'rise-out'].includes(a.animationName)) {
-      const at = a.currentTime;
-      a.cancel();
+      // Every animation on the element is lifted, not only this one: an entrance and an exit both move translate.
+      const own = el.getAnimations().map((x) => [x, x.currentTime]);
+      for (const [x] of own) x.cancel();
       const base = getComputedStyle(el).translate;
-      a.currentTime = at;
-      a.pause();
+      for (const [x, at] of own) {
+        x.currentTime = at;
+        x.pause();
+      }
       if (base && base !== 'none' && !/^0px( 0px)?( 0px)?$/.test(base)) ownTranslate = base;
     }
     return {
@@ -273,6 +286,27 @@ function openingCoverage() {
   for (const el of document.body.querySelectorAll('*')) {
     const r = el.getBoundingClientRect();
     if (r.width < 1 || r.height < 1 || r.right <= 0 || r.bottom <= 0 || r.left >= vw || r.top >= vh) continue;
+    // A filled SVG shape (a map's land, an illustration) counts where it is painted, tested per cell, since its
+    // box can span the frame while the shape covers only part of it.
+    if (el instanceof SVGGeometryElement) {
+      const s = getComputedStyle(el);
+      if (s.fill === 'none' || Number(s.fillOpacity) * opacityOf(el) < 0.5) continue;
+      // A pattern fill or a frame-sized rect is a backdrop layer, present in an empty frame too.
+      if (/^url\(/.test(s.fill) || (el.localName === 'rect' && r.width * r.height > vw * vh * 0.6)) continue;
+      const inv = el.getScreenCTM()?.inverse();
+      if (!inv) continue;
+      const svg = el.ownerSVGElement;
+      const p = svg.createSVGPoint();
+      for (let y = Math.max(0, Math.floor((r.top / vh) * H)); y < Math.min(H, Math.ceil((r.bottom / vh) * H)); y++) {
+        for (let x = Math.max(0, Math.floor((r.left / vw) * W)); x < Math.min(W, Math.ceil((r.right / vw) * W)); x++) {
+          if (cells[y * W + x]) continue;
+          p.x = ((x + 0.5) / W) * vw;
+          p.y = ((y + 0.5) / H) * vh;
+          if (el.isPointInFill(p.matrixTransform(inv))) cells[y * W + x] = 1;
+        }
+      }
+      continue;
+    }
     if (r.width * r.height > vw * vh * 0.6) continue;
     const s = getComputedStyle(el);
     const filled = (s.backgroundColor !== 'transparent' && !/rgba\([^)]*,\s*0\)/.test(s.backgroundColor)) || s.backgroundImage !== 'none';
@@ -668,6 +702,26 @@ export async function checkScene(browser, m, scene, carry = null) {
     }
     for (const c of sounding) {
       if (c.subs?.length > 8 && !c.accentCap) add('warn', c.at, `data-sfx "${c.sound}" on ${c.target} would sound ${c.subs.length} accents.`, 'Cap it with data-sfx-accents="3" or "4".');
+    }
+
+    // Under narration the voice leads. An effect on top of a word competes with it and distracts: it belongs in a
+    // pause, and only where the picture needs a sound the voice does not give. Two effects a scene at most.
+    if (m.voiceover || m.scenes.some((s) => s.audio)) {
+      const { spokenWords } = await import('./voice.mjs');
+      const { words } = spokenWords(m);
+      if (words.length) {
+        if (sounding.length > 2) add('warn', null, `${sounding.length} sound cues under narration in one scene (${sounding.map((c) => c.sound).join(', ')}). Under a voice, effects distract: keep at most 2, each with a clear reason.`, 'Keep the one or two that mark what the voice does not say (a transition, the payoff), and drop the rest.');
+        for (const c of sounding) {
+          const t = scene.start + c.at / 1000;
+          // The hit (its first 120 ms) must clear the words. A ring-out that fades under the next word is fine.
+          const over = words.find((w) => w.start < t + 0.12 && w.end > t);
+          if (!over) continue;
+          // The next pause of 0.3 s or more after the cue, where the effect could sit.
+          let gap = null;
+          for (let i = words.indexOf(over); i < words.length - 1 && gap == null; i++) if (words[i + 1].start - words[i].end >= 0.3) gap = words[i].end;
+          add('warn', c.at, `data-sfx "${c.sound}" on ${c.target} plays over the narration ("${over.text}" at ${over.start.toFixed(2)}s).`, `Move its moment into a pause${gap != null ? ` (the next starts at ${gap.toFixed(2)}s)` : ''}, or drop it if the voice already carries the moment.`);
+        }
+      }
     }
 
     // An opening frame with only a headline (or nothing) reads as a dead cut. The motif should be on screen by 0.4 s.
