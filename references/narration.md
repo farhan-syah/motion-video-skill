@@ -29,13 +29,13 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
 - **Script first:** when the skill writes the script, it comes before any audio. Every fact in it comes from the gathered facts (`direction.md`, §0).
 - **Native wording:** write in the audience's spoken language, never translated from English. Use a native short-video narrator's words, not textbook register. Follow a writing skill for that language when one exists.
 - **Spoken, not read:** short phrases, one per line, with a beat before a number or a reveal.
-- **Pace:** 4.5 to 5.5 syllables per second while speaking. Faster tires the listener. `speak` prints the pace and the `--speed` that reaches it (`0.85` is 15% slower, pitch kept). `"tts": { "speed": 0.9 }` sets it for every video.
+- **Pace:** `speak` aims at about 4.1 syllables per second while speaking (3.5 to 4.7), a relaxed explainer. Match it to the narration: a lesson reads slower, a launch or an ad faster. A natural take inside the range needs no `--speed`. `speak` prints the pace and the `--speed` that reaches it (`0.85` is 15% slower, pitch kept). `--pace 4.2` sets another target, for a calmer or brisker read. `"tts": { "speed": 0.9, "pace": 4.3 }` sets both for every video.
 
 ## Text to speech
 
 `speak script.txt` writes `assets/voiceover.wav`, and `assets/voiceover.txt` beside it without the pause marks (for captions and `transcribe`). A source script at that path keeps its marks: the spoken words then go to `voiceover.spoken.txt`. Set `"voiceover": { "file": …, "script": … }` as `speak` prints it.
 
-- **Engine:** Kokoro (English, CPU) by default. `--engine voxcpm` (30 languages, NVIDIA GPU), `--model <Hugging Face id>` (any language a model speaks, CPU) or `--command` (any TTS). Choosing one, languages, hardware and adding a new voice: `references/tts.md`.
+- **Engine:** the best this machine runs by default: VoxCPM2 (30 languages, NVIDIA GPU), else Kokoro (English, CPU). `--engine kokoro|voxcpm`, `--model <Hugging Face id>` (any language a model speaks, CPU) or `--command` (any TTS). Choosing one, languages, hardware and adding a new voice: `references/tts.md`.
 
 ### Pauses
 
@@ -46,12 +46,14 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
 | Sentence end inside a line | 0.3 s                          |
 | `[pause]` / `[pause 1.2]`  | 0.6 s / exactly 1.2 s          |
 
-Every engine speaks each phrase alone and joins them with these pauses. `--command … --one-call` gets the whole script as one text, without the marks.
+- **Kokoro, `--model` and `--command`** speak each phrase alone and join them with these pauses. `--command … --one-call` gets the whole script as one text, without the marks.
+- **VoxCPM2** speaks each beat whole, so only blank lines and `[pause]` marks are exact there. Inside a beat, its punctuation sets the pauses: a period or question mark a clear pause, a comma a short one, "…" a hesitation. Split a sentence for a stronger pause.
 
 ### Writing for a generated voice
 
 - **Numbers:** in other languages, write them as words ("sembilan belas lima puluh"). A voice can read digits in English. Captions still show the spoken words.
-- **Short phrases:** VoxCPM2 garbles one- or two-word lines far more often. Give each line 3 words or more ("Korang tahu tak, Kuala Lumpur ni…").
+- **Short phrases:** VoxCPM2 garbles a beat of one or two words far more often. Join it to the line before or after.
+- **Non-verbal tags (VoxCPM2):** `[laughing]`, `[sigh]`, `[Uhm]`, `[Shh]`, `[Question-ah]`, `[Question-ei]`, `[Question-en]`, `[Question-oh]`, `[Surprise-wa]`, `[Surprise-yo]`, `[Dissatisfaction-hnn]`, written where the sound happens. Use them rarely, at most one per sentence. Captions and the speech check leave them out, and other engines drop them.
 
 ### Speech check
 
@@ -69,7 +71,7 @@ Every engine speaks each phrase alone and joins them with these pauses. `--comma
 ### Takes and phrase spans
 
 - **Takes are kept** by text, voice and seed (`~/.cache/motion-video/speak`). A re-run speaks only changed phrases. Every other phrase keeps its exact audio.
-- **Chosen takes are recorded** in `voiceover.takes.json`, re-rolls included. A later run (a new `--speed`, one reworded line) keeps them. An explicit `--seed` starts over.
+- **Chosen takes are recorded** in `voiceover.takes.json` with the voice's seed, re-rolls included. A later run (a new `--speed`, one reworded line) keeps them and the seed, so `--seed` is needed only once. A different `--seed` starts over.
 - **`--reroll 3,10`** draws new takes for those phrases alone. The earlier take stays in the running, so a worse draw never replaces it.
 - **Phrase spans:** `speak` writes where each phrase sits in the audio (`voiceover.phrases.json`). `transcribe` keeps each phrase's words inside its span, so no word drifts across a pause.
 

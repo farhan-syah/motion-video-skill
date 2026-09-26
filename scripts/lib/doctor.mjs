@@ -138,12 +138,18 @@ export async function doctor(root) {
   }
   say('voxcpm2', vox.ok ? `available (${vox.why}): 30 languages, voice design and cloning. ${ckpt}` : `not available: ${vox.why}`);
   const engine = cfg.tts?.engine ? cfg.tts.engine : cfg.tts?.command ? `command: ${cfg.tts.command}` : cfg.tts?.model ? `model: ${cfg.tts.model}` : null;
-  say('tts default', engine ? `${engine} (from the config)` : `Kokoro, English only. Other languages: ${vox.ok ? '--engine voxcpm (available here)' : uv ? '--model facebook/mms-tts-<iso>' : 'the user\'s TTS (--command) or a recording'}. "tts" in the config changes the default (references/tts.md).`);
+  say('tts default', engine
+    ? `${engine} (from the config)`
+    : vox.ok
+      ? 'VoxCPM2, the best engine here: 30 languages. Design its voice with --voice "(…)". --engine kokoro only for a fast English draft.'
+      : `Kokoro, English only: VoxCPM2 ${vox.why}. Other languages: ${uv ? '--model facebook/mms-tts-<iso>' : 'the user\'s TTS (--command) or a recording'} (references/tts.md).`);
   if (!vox.ok && !cfg.tts?.command && !cfg.tts?.model) {
     limits.push(uv
       ? `narration in a language other than English: only MMS-TTS on the CPU (--model facebook/mms-tts-<iso>), one plain voice per language, non-commercial use only. VoxCPM2 ${vox.why}. A recording or the user's TTS (speak --command) sounds better.`
       : `narration in a language other than English: no engine here (VoxCPM2 ${vox.why}, and no uv for --model voices). Ask for the user's TTS (speak --command) or a recording.`);
   }
+  const gpuNow = vox.ok ? (await import('./speak.mjs')).nvidiaGpu() : null;
+  if (gpuNow && gpuNow.freeGb < 7.5) limits.push(`the GPU has ${gpuNow.freeGb.toFixed(1)} GB free now, and VoxCPM2 needs about 8 GB. Another process holds the rest (nvidia-smi lists it): speak with VoxCPM2 once it ends.`);
   const modelFree = freeSpace(existsSync(models) ? models : cacheRoot());
   if (vox.ok && ckpt.startsWith('no checkpoint') && modelFree != null && modelFree < 8 * 1024 ** 3) limits.push(`VoxCPM2's first run downloads about 4.7 GB, and the model folder's disk has ${gb(modelFree)} free.`);
 

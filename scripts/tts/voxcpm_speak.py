@@ -5,16 +5,16 @@
 """Narration with VoxCPM2 (OpenBMB, Apache 2.0): 30 languages, voice design and voice cloning, 48 kHz.
 
 Run by `video.mjs speak --engine voxcpm` through `uv run`, which builds this script's environment on first use.
-The model loads once and speaks each sentence of a JSON list into its own WAV: seg-000.wav, seg-001.wav, ... in --dir.
-video.mjs splits the script, checks each sentence by transcribing it back, and calls this again for the sentences
-to regenerate, with new seeds.
+The model loads once and speaks each part of a JSON list (a beat of the script, or one sentence) into its own WAV:
+seg-000.wav, seg-001.wav, ... in --dir. video.mjs splits the script, checks each part by transcribing it back, and
+calls this again for the parts to regenerate, with new seeds.
 
-One voice holds across sentences: with --reference every sentence clones that recording. Otherwise the first
-sentence is designed from --voice (or the model's default voice) and saved as anchor.wav in --dir, and every later
-sentence, in this run or a later one, clones it.
+One voice holds across parts: with --reference every part clones that recording. Otherwise the one part given is
+designed from --voice (or the model's default voice) and saved as anchor.wav in --dir, and video.mjs passes it as
+the reference for every later part.
 
 Usage: uv run voxcpm_speak.py --sentences list.json --dir DIR [--voice "(A calm male narrator)"]
-       [--reference voice.wav] [--model openbmb/VoxCPM2]
+       [--reference voice.wav] [--style "(relaxed, explaining)"] [--cfg 2.0] [--steps 10] [--model openbmb/VoxCPM2]
        list.json: [{"index": 0, "text": "...", "seed": 7}, ...]
 """
 import argparse
@@ -35,15 +35,22 @@ def main():
     ap.add_argument("--voice", default="")
     ap.add_argument("--reference", default="")
     ap.add_argument("--model", default="openbmb/VoxCPM2")
+    # Delivery to steer every cloned part toward: "(relaxed, explaining to a friend)". Hi-Fi cloning (prompt audio plus
+    # its transcript) ignores it and reads it aloud, so cloning here uses the reference alone.
+    ap.add_argument("--style", default="")
+    # Guidance: 1.0-2.0 relaxed and natural, above 2.0 stricter to the text with more noise. Steps: 4-30, more is more
+    # natural and slower.
+    ap.add_argument("--cfg", type=float, default=2.0)
+    ap.add_argument("--steps", type=int, default=10)
     a = ap.parse_args()
 
     with open(a.sentences, encoding="utf-8") as f:
         todo = json.load(f)
     if not todo:
         sys.exit("voxcpm_speak: no sentences to speak.")
-    voice = a.voice.strip()
-    if voice and not voice.startswith("("):
-        voice = f"({voice})"
+    paren = lambda t: t if not t or t.startswith("(") else f"({t})"
+    voice = paren(a.voice.strip())
+    style = paren(a.style.strip())
     anchor_file = os.path.join(a.dir, "anchor.wav")
     anchor = a.reference or (anchor_file if os.path.exists(anchor_file) else None)
 
@@ -53,9 +60,9 @@ def main():
         # The seed makes a take repeatable: the same sentence and seed give the same audio.
         torch.manual_seed(s["seed"])
         if anchor:
-            wav = model.generate(text=s["text"], reference_wav_path=anchor, cfg_value=2.0, inference_timesteps=10)
+            wav = model.generate(text=f"{style}{s['text']}", reference_wav_path=anchor, cfg_value=a.cfg, inference_timesteps=a.steps)
         else:
-            wav = model.generate(text=f"{voice}{s['text']}", cfg_value=2.0, inference_timesteps=10)
+            wav = model.generate(text=f"{voice}{s['text']}", cfg_value=a.cfg, inference_timesteps=a.steps)
             # The first designed sentence becomes the voice every later sentence clones.
             sf.write(anchor_file, wav, rate)
             anchor = anchor_file

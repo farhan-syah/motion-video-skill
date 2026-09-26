@@ -4,6 +4,22 @@ What each version adds. `node scripts/video.mjs version` prints the installed on
 
 ## [Unreleased]
 
+- VoxCPM2 designs one reference voice from the script's opening (`voiceover.voice.wav`), then speaks one beat per generation instead of one sentence. The voice holds, and the delivery connects.
+- `speak --style` steers VoxCPM2's delivery. `--cfg` and `--steps` default to 1.6 and 16, a relaxed read.
+- VoxCPM2 voices non-verbal tags (`[sigh]`, `[laughing]`, `[Uhm]`). Captions, the speech check and other engines drop them.
+- VoxCPM2 keeps one designed voice across `speak` calls with the same `--voice`, `--seed` and `--language`.
+- `doctor` warns when the GPU lacks free memory for VoxCPM2, and `speak` explains an out-of-memory stop.
+- Fixed: the pace reading counted silence, so its suggested `--speed` overshot. A pace of 4.5 no longer reads as slow.
+- Fixed: "eleven hundred" and "twenty-five hundred" read as 1100 and 2500 in the speech check.
+- Fixed: hard consonants no longer count as clicks.
+- Fixed: the audit judged appearances by glyph movement, failing cues the renderer placed right.
+- Fixed: narrated videos reach the loudness target.
+- A word both recognizers miss is marked `ok ?`.
+- The pace target is 4.1 syllables per second (3.5 to 4.7), calmer than before. `--pace` or `tts.pace` sets another.
+- `voiceover.takes.json` records the voice's seed, so a later run keeps the voice and its re-rolls without `--seed`.
+- Fixed: "8GB" matches "gigabytes", and a compound heard as two words ("MMS -TTS") counts as heard.
+- `speak` picks the best engine the machine runs when none is named: VoxCPM2 with an NVIDIA GPU of 8 GB and `uv`, else Kokoro. `doctor` names it.
+
 ## [1.1.0]
 
 - `speak --model` runs Hugging Face TTS models without ONNX weights in Python on the CPU, such as MMS-TTS in 1,100+ languages.

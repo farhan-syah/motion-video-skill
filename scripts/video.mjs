@@ -30,7 +30,8 @@ Commands:
                                  Draw a map from Natural Earth outlines: countries, highlights, pins, great-circle routes.
                                  --land replaces the outlines with precise polygons, --layer draws lines and areas.
                                  Default size: the manifest's. --countries lists every country name.
-  speak TEXT|FILE [--engine kokoro|voxcpm] [--voice V] [--reference WAV] [--speed S] [--seed N] [--reroll 3,7]
+  speak TEXT|FILE [--engine kokoro|voxcpm] [--voice V] [--style S] [--reference WAV] [--speed S] [--pace P] [--seed N]
+        [--reroll 3,7] [--cfg 1.6] [--steps 16]
         [--language L]
         [--model HF_ID | --command "TEMPLATE" [--one-call]] [--out WAV]
                                  Narration from a script. Writes the WAV and its script next to it (default
@@ -38,10 +39,12 @@ Commands:
                                  {text_file}, {out}, {voice} and {reference}, once per phrase (--one-call: once for
                                  the whole script, pause marks dropped); --engine voxcpm runs VoxCPM2 (30 languages, voice
                                  design with --voice "(description)", cloning with --reference; NVIDIA GPU, 8 GB);
-                                 --model runs a transformers.js TTS model; the default is Kokoro (local, English).
+                                 --model runs a Hugging Face TTS model; --engine kokoro runs Kokoro (local, English).
+                                 The default is the best engine here: VoxCPM2 with its GPU, else Kokoro.
                                  "tts" in ~/.config/motion-video/config.json sets defaults. Every take is heard
-                                 back with Whisper (--language sets its language). VoxCPM2 regenerates a sentence
-                                 with extra or missing speech under a new seed. It exits 1 when a problem remains.
+                                 back with Whisper (--language sets its language). VoxCPM2 designs the voice once
+                                 (<out>.voice.wav), speaks one beat per generation in the --style delivery, and
+                                 regenerates a failing beat under a new seed. It exits 1 when a problem remains.
   transcribe [FILE ...] [--model M] [--language L] [--script TXT]
                                  Word-level timestamps for narration, from a local Whisper model. With no FILE: the
                                  manifest's voiceover and every scene audio. Writes out/voice/<name>.words.json and
@@ -96,7 +99,11 @@ function parseArgs(argv) {
     else if (a === '--language') opts.language = argv[++i];
     else if (a === '--script') opts.script = argv[++i];
     else if (a === '--voice') opts.voice = argv[++i];
+    else if (a === '--style') opts.style = argv[++i];
+    else if (a === '--cfg') opts.cfg = num(a, argv[++i], 0.5);
+    else if (a === '--steps') opts.steps = Math.round(num(a, argv[++i], 1));
     else if (a === '--speed') opts.speed = num(a, argv[++i], 0.5);
+    else if (a === '--pace') opts.pace = num(a, argv[++i], 2);
     else if (a === '--seed') opts.seed = num(a, argv[++i], 0);
     else if (a === '--reroll') opts.reroll = argv[++i].split(',').map((v) => Number(v.trim()));
     else if (a === '--out') opts.out = argv[++i];
@@ -303,15 +310,21 @@ async function speakCmd(opts) {
     voice: opts.voice ?? undefined, speed: opts.speed ?? undefined, model: opts.model ?? undefined, command: opts.command ?? undefined,
     engine: opts.engine ?? undefined, reference: opts.reference ? resolve(opts.reference) : undefined, device: opts.device ?? undefined,
     seed: opts.seed ?? undefined, language: opts.language ?? undefined, cues: cues ?? undefined, reroll: opts.reroll ?? undefined,
-    oneCall: opts.oneCall ?? undefined,
+    oneCall: opts.oneCall ?? undefined, style: opts.style ?? undefined, cfg: opts.cfg ?? undefined, steps: opts.steps ?? undefined,
   });
-  // Pace: an explainer reads best around 4.5-5.5 syllables a second while speaking. Faster tires the listener.
+  // Pace: a relaxed explainer sits near 4.1 syllables a second while speaking (3.5 to 4.7). Faster tires the
+  // listener. --pace or "tts.pace" sets another target, with the range 0.6 either side of it.
   const { pace } = await import('./lib/speak.mjs');
-  const rate = phrases ? pace(phrases) : null;
-  // The suggestion aims at 5 and scales the speed this take was made with.
+  const { config } = await import('./lib/paths.mjs');
+  const target = opts.pace ?? config().tts?.pace ?? 4.1;
+  // The verdict judges the value as printed, so a pace on the range's edge never reads as outside it.
+  const rate = phrases ? Math.round(pace(phrases, out) * 10) / 10 : null;
+  // The suggestion aims at the target and scales the speed this take was made with.
   const at = opts.speed ?? 1;
-  const aim = Math.round(Math.min(1.5, Math.max(0.6, (at * 5) / rate)) * 100) / 100;
-  if (rate) console.log(`Pace: ${rate.toFixed(1)} syllables per second while speaking${rate > 5.5 ? `: fast for an explainer. Run again with --speed ${aim}.` : rate < 4.5 ? `: slow for an explainer. Run again with --speed ${aim}.` : ': in the range an explainer reads best (4.5 to 5.5).'}`);
+  const aim = Math.round(Math.min(1.5, Math.max(0.6, (at * target) / rate)) * 100) / 100;
+  const lo = +(target - 0.6).toFixed(1);
+  const hi = +(target + 0.6).toFixed(1);
+  if (rate) console.log(`Pace: ${rate.toFixed(1)} syllables per second while speaking${rate > hi ? `: faster than the ${lo} to ${hi} range. --speed ${aim} reaches ${target}.` : rate < lo ? `: slower than the ${lo} to ${hi} range. --speed ${aim} reaches ${target}.` : `: in the ${lo} to ${hi} range around ${target}.`}`);
   if (cues) {
     console.log(`Timed script: ${cues.length} lines placed at their times.`);
     for (const t of timing) console.log(`  ${t}`);
@@ -328,10 +341,11 @@ async function speakCmd(opts) {
   else rmSync(phrasesFile(out), { force: true });
   const rel = (f) => relative(process.cwd(), f);
   console.log(`${rel(out)} (${duration.toFixed(2)}s, ${engine}) and its script ${rel(txt)}
-Next: set "voiceover": { "file": "${rel(out)}", "script": "${rel(txt)}" } in video.json, then run transcribe.`);
+Next, in video.json: "voiceover": { "file": "${rel(out)}", "script": "${rel(txt)}" } for narration across the whole video,
+or "audio": "${rel(out)}" and "script": "${rel(txt)}" on the one scene it narrates. Then run transcribe.`);
   // Every phrase as it was heard back, so a wrong word shows even when the check passes it.
   console.log('\nHeard back, phrase by phrase:');
-  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.doubt?.length ? `\n        both recognizers heard ${c.doubt.map((w) => `"${w}"`).join(', ')} differently: listen to it, and ${/^VoxCPM2/.test(engine) ? '--reroll this phrase' : 'reword the phrase'} if it is said wrong` : ''}`);
+  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.doubt?.length ? `\n        both recognizers missed or misheard ${c.doubt.map((w) => `"${w}"`).join(', ')}: listen to it, and ${/^VoxCPM2/.test(engine) ? '--reroll this phrase' : 'reword the phrase'} if it is said wrong` : ''}`);
   if (problems.length) {
     console.log(`\nThe speech check found ${problems.length} problem(s), heard back with Whisper:`);
     for (const p of problems) console.log(`  ${p}`);

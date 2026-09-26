@@ -64,36 +64,72 @@ function decode(file) {
 // Sentences, so long scripts stay within a model's input length and get a natural pause between sentences.
 // Narration is paced, not read out: the script marks its pauses. A blank line is a long pause (a new beat), a line
 // break a breath, a sentence end inside a line a short stop, and [pause] or [pause 0.6] an exact pause in seconds.
-// Returns the phrases to speak, each with the silence after it.
+// Returns the phrases to speak, each with the silence after it and its kind: sentence, line, beat, mark or end.
 export const PAUSES = { beat: 0.8, line: 0.45, sentence: 0.3, mark: 0.6 };
 export function phrases(script) {
   const out = [];
-  const add = (text, pause) => {
+  const add = (text, pause, kind) => {
     const t = text.replace(/\s+/g, ' ').trim();
-    if (t) out.push({ text: t, pause });
-    else if (out.length) out[out.length - 1].pause = Math.max(out[out.length - 1].pause, pause);
+    if (t) out.push({ text: t, pause, kind });
+    else if (out.length) {
+      const last = out[out.length - 1];
+      // A [pause] mark is exact, so it wins over the break it sits on.
+      if (kind === 'mark' || (last.kind !== 'mark' && pause > last.pause)) last.kind = kind;
+      last.pause = kind === 'mark' ? pause : Math.max(last.pause, pause);
+    }
   };
   const beats = script.replace(/\r/g, '').split(/\n\s*\n/);
   beats.forEach((beat, bi) => {
     const lines = beat.split('\n');
     lines.forEach((line, li) => {
       const end = li < lines.length - 1 ? PAUSES.line : bi < beats.length - 1 ? PAUSES.beat : 0;
+      const endKind = li < lines.length - 1 ? 'line' : bi < beats.length - 1 ? 'beat' : 'end';
       // [pause] marks split a line into pieces.
       const pieces = line.split(/\[pause(?:\s+([\d.]+))?\]/i);
       for (let k = 0; k < pieces.length; k += 2) {
         const mark = k + 1 < pieces.length ? Number(pieces[k + 1] ?? PAUSES.mark) || PAUSES.mark : null;
         const said = sentences(pieces[k]);
-        said.forEach((s, si) => add(s, si < said.length - 1 ? PAUSES.sentence : mark ?? end));
-        if (!said.length && mark != null) add('', mark);
+        said.forEach((s, si) => (si < said.length - 1 ? add(s, PAUSES.sentence, 'sentence') : mark != null ? add(s, mark, 'mark') : add(s, end, endKind)));
+        if (!said.length && mark != null) add('', mark, 'mark');
       }
     });
   });
-  if (out.length) out[out.length - 1].pause = 0;
+  if (out.length) Object.assign(out[out.length - 1], { pause: 0, kind: 'end' });
   return out;
 }
 
-// The words of a script as spoken: pause marks removed, one line. This is the script captions and checks read.
-export const spoken = (script) => script.replace(/\[pause(?:\s+[\d.]+)?\]/gi, ' ').replace(/\s+/g, ' ').trim();
+// What VoxCPM2 speaks in one generation: a beat, the phrases between blank lines and [pause] marks, joined so the
+// model sets the pauses inside it from the meaning. Each generation is a separate draw of the voice, so fewer, longer
+// ones keep it steadier and its delivery connected. A beat over `max` words splits at a sentence end, since long
+// inputs make the model unstable. lines: every line break also splits (a timed script places each line at its time).
+// Each chunk keeps its sentences, to speak them one by one when the whole chunk keeps failing.
+export function chunks(script, { lines = false, max = 40 } = {}) {
+  const out = [];
+  let group = [];
+  const count = (list) => list.reduce((n, p) => n + p.text.split(/\s+/).length, 0);
+  const flush = () => {
+    if (!group.length) return;
+    const last = group[group.length - 1];
+    out.push({ text: group.map((p) => p.text).join(' '), pause: last.pause, kind: last.kind, sentences: group });
+    group = [];
+  };
+  for (const p of phrases(script)) {
+    if (group.length && count(group) + count([p]) > max) flush();
+    group.push(p);
+    if (!(p.kind === 'sentence' || (p.kind === 'line' && !lines))) flush();
+  }
+  flush();
+  return out;
+}
+
+// VoxCPM2's non-verbal tags: a laugh, a sigh, a thinking sound, a question or surprise particle, written in the script
+// where it happens ("[sigh] Not again."). VoxCPM2 voices them. Captions, the speech check and every other engine drop
+// them, since they are not words.
+export const TAGS = /\[(?:laughing|sigh|uhm|shh|question-(?:ah|ei|en|oh)|surprise-(?:wa|yo)|dissatisfaction-hnn)\]/gi;
+export const withoutTags = (text) => text.replace(TAGS, ' ').replace(/[ \t]+/g, ' ').replace(/ ?\n ?/g, '\n').trim();
+
+// The words of a script as spoken: pause marks and tags removed, one line. This is the script captions and checks read.
+export const spoken = (script) => withoutTags(script.replace(/\[pause(?:\s+[\d.]+)?\]/gi, ' ')).replace(/\s+/g, ' ').trim();
 
 // A stop inside a number ("13.5") or a name ("Node.js") is not a sentence end: Latin stops end one only before a
 // space or the end of the text. CJK stops always do.
@@ -199,10 +235,10 @@ export function command(script, { command: template, voice = '', reference = '',
 
 // The NVIDIA GPU and its memory, or null. VoxCPM2 needs about 8 GB.
 export function nvidiaGpu() {
-  const r = spawnSync('nvidia-smi', ['--query-gpu=name,memory.total', '--format=csv,noheader,nounits'], { encoding: 'utf8' });
+  const r = spawnSync('nvidia-smi', ['--query-gpu=name,memory.total,memory.free', '--format=csv,noheader,nounits'], { encoding: 'utf8' });
   if (r.status !== 0) return null;
-  const [name, mib] = r.stdout.split('\n')[0].split(',').map((x) => x.trim());
-  return { name, gb: Number(mib) / 1024 };
+  const [name, mib, free] = r.stdout.split('\n')[0].split(',').map((x) => x.trim());
+  return { name, gb: Number(mib) / 1024, freeGb: Number(free) / 1024 };
 }
 
 export function voxcpmReady() {
@@ -306,6 +342,12 @@ export function clicks(x, rate = 48000) {
     for (let k = f - 75; k <= f + 75; k++) if (k >= 0 && k < e.length && Math.abs(k - f) > 3) near.push(e[k]);
     near.sort((a, b) => a - b);
     const p90 = near[Math.floor(near.length * 0.9)] || 1e-9;
+    // A click is a discontinuity about a millisecond long. A consonant burst (/k/, /t/, /tʃ/) is as sharp but lasts
+    // 8 ms or more, so a spike wider than 3 hops (6 ms) at half its height is speech, not a click.
+    let width = 1;
+    for (let k = f - 1; k >= 0 && e[k] > e[f] / 2; k--) width++;
+    for (let k = f + 1; k < e.length && e[k] > e[f] / 2; k++) width++;
+    if (width > 3) continue;
     if (e[f] > 6 * p90 && (!out.length || (f * hop) / rate - out[out.length - 1] > 0.05)) out.push(+((f * hop) / rate).toFixed(2));
   }
   return out;
@@ -331,43 +373,68 @@ async function heardCheck(file, text, language) {
     t = await transcribe(file, { model: SMALL_MODEL, language });
     c = checkSpeech(t.words, text);
   }
-  // A passing take with words heard differently gets a second opinion from the other model. A word both models hear
-  // differently is likely said wrong (listen to it). One heard right by either is likely the recognizer's slip.
+  // A passing take with words heard differently or not at all gets a second opinion from the other model. A word both
+  // models miss or mishear is likely dropped or said wrong (listen to it). One heard right by either is likely the
+  // recognizer's slip.
   let doubt = [];
-  if (c.ok && c.unsure.length) {
+  if (c.ok && (c.unsure.length || c.missing.length)) {
     const other = model === SMALL_MODEL ? DEFAULT_MODEL : SMALL_MODEL;
     const c2 = checkSpeech((await transcribe(file, { model: other, language })).words, text);
-    doubt = c.unsure.filter((w) => c2.unsure.includes(w));
+    const off = (x) => [...x.unsure, ...x.missing];
+    doubt = [...new Set(off(c).filter((w) => off(c2).includes(w)))];
   }
   return { ...c, doubt, heard: clip(t.words.map((w) => w.text).join(' ')) };
 }
 
 // VoxCPM2 through its runner (scripts/tts/voxcpm_speak.py). uv builds the Python environment on first use (PyTorch,
 // several GB). The model loads from a checkpoint already on disk, offline, and downloads into the model folder only
-// when none exists. Each sentence is its own take, transcribed back and checked. A failed take is regenerated with
-// another seed, up to 3 tries, and the best take of each sentence is kept.
-async function voxcpm(script, { voice = '', reference = '', device, seed = 7, freshSeed = false, language, reroll = [] }, out) {
+// when none exists.
+// The voice comes first: a recording to clone (--reference), or a reference designed once from --voice by speaking
+// the script's opening (about 10 s), saved beside the audio to listen to. Then each beat (chunks) is one generation
+// that clones it, transcribed back and checked. A failed take is regenerated with another seed, up to 3 tries, and the
+// best take is kept. A beat that fails every take is spoken sentence by sentence instead.
+async function voxcpm(script, { voice = '', reference = '', style = '', cfg = 1.6, steps = 16, device, seed: asked, configSeed, language, reroll = [], lines = false }, out) {
   const ready = voxcpmReady();
   if (!ready.ok && !device) throw new Error(`speak --engine voxcpm ${ready.why}. Use the default Kokoro engine, another TTS with --command, or --device cpu (very slow).`);
-  const units = phrases(script);
-  const said = units.map((u) => u.text);
-  if (!said.length) throw new Error('speak: the script is empty.');
-  for (const n of reroll) if (!(n >= 1 && n <= said.length)) throw new Error(`speak --reroll ${n}: the script has phrases 1 to ${said.length}.`);
-  // VoxCPM2 garbles a phrase of one or two words far more often than a longer one.
-  const short = said.map((t, i) => ({ t, i })).filter((p) => p.t.split(/\s+/).length < 3);
-  if (short.length) console.error(`speak: short phrases fail more often with VoxCPM2: ${short.map((p) => `${p.i + 1} "${p.t}"`).join(', ')}. When one fails, join it to the next line ("Korang tahu tak, Kuala Lumpur ni…").`);
+  if (!voice && !reference) console.error('speak: no --voice given, so VoxCPM2 picks its own voice. Design one with --voice "(age, pitch, tone, accent)" (references/tts.md).');
+  let units = chunks(script, { lines });
+  if (!units.length) throw new Error('speak: the script is empty.');
+  for (const n of reroll) if (!(n >= 1 && n <= units.length)) throw new Error(`speak --reroll ${n}: the script has parts 1 to ${units.length}.`);
+  // VoxCPM2 garbles a part of one or two words far more often than a longer one.
+  const short = units.map((u, i) => ({ t: u.text, i })).filter((p) => p.t.split(/\s+/).length < 3);
+  if (short.length) console.error(`speak: short parts fail more often with VoxCPM2: ${short.map((p) => `${p.i + 1} "${p.t}"`).join(', ')}. When one fails, join it to the line before or after.`);
+  // The take chosen for each part is recorded beside the audio with the seed that made the voice, so a later run (a
+  // new speed, one reworded line) keeps both, re-rolled takes included. Only a --seed other than the recorded one
+  // starts over.
+  const record = out.replace(/\.[^./]+$/, '') + '.takes.json';
+  let saved = {};
+  try {
+    saved = JSON.parse(readFileSync(record, 'utf8'));
+  } catch {}
+  const current = saved.takes && typeof saved.takes === 'object';
+  const before = current ? saved.seed : configSeed ?? 7;
+  const seed = asked ?? before ?? configSeed ?? 7;
+  const chosen = asked != null && asked !== before ? {} : current ? saved.takes : saved;
   const dir = mkdtempSync(join(tmpdir(), 'motion-video-tts-'));
-  // Takes are kept by what makes them: the model, the voice, the text and the seed. A run speaks only the phrases it
-  // has no take for, so a re-run after rewording one phrase keeps every other phrase exactly as it was.
+  // Takes are kept by what makes them: the model, the voice, the style, the text and the seed. A run speaks only the
+  // parts it has no take for, so a re-run after rewording one part keeps every other part exactly as it was.
   const cache = join(cacheRoot(), 'speak', 'voxcpm');
   mkdirSync(cache, { recursive: true });
   const checkpoint = voxcpmCheckpoint();
   const refId = reference ? `${reference}:${statSync(reference).size}:${statSync(reference).mtimeMs}` : '';
   const hash = (...parts) => createHash('sha1').update(JSON.stringify([checkpoint ?? VOXCPM, voice, refId, ...parts])).digest('hex').slice(0, 20);
-  // Without a reference, the first phrase's designed voice is the anchor every phrase clones.
-  const anchorKey = reference ? null : hash('anchor', said[0], seed);
-  const anchorFile = anchorKey ? join(cache, `anchor-${anchorKey}.wav`) : null;
-  const takeFile = (s) => join(cache, `${hash(anchorKey, s.text, s.seed)}.wav`);
+  // A designed voice is kept by its description, seed and language, so every speak call with the same --voice (per
+  // scene files included) clones the same one.
+  const anchorKey = reference ? null : hash('reference', seed, language ?? '');
+  const anchorFile = anchorKey ? join(cache, `voice-${anchorKey}.wav`) : null;
+  // Takes made at the runner's own settings (cfg 2, 10 steps) keep their older keys.
+  const takeFile = (s) => join(cache, `${hash(anchorKey, style, s.text, s.seed, ...(cfg !== 2 || steps !== 10 ? [cfg, steps] : []))}.wav`);
+  // The designed voice speaks the script's opening, 25 words or more: a clip long enough for every part to hold it.
+  const opening = [];
+  for (const p of phrases(script)) {
+    opening.push(p.text);
+    if (opening.join(' ').split(/\s+/).length >= 25) break;
+  }
   try {
     const runner = fileURLToPath(new URL('../tts/voxcpm_speak.py', import.meta.url));
     if (!checkpoint) console.error(`speak: no VoxCPM2 checkpoint on disk. Downloading it (about 4.7 GB) into ${modelsDir()}. This happens once.`);
@@ -376,35 +443,34 @@ async function voxcpm(script, { voice = '', reference = '', device, seed = 7, fr
       ...(checkpoint ? { HF_HUB_OFFLINE: '1' } : {}), ...(device === 'cpu' ? { CUDA_VISIBLE_DEVICES: '' } : {}),
     };
     const generate = (list, designing = false) => {
-      console.error(`speak: VoxCPM2 is speaking ${list.length} phrase(s)${checkpoint ? '' : ' after the download'}, about 3 s each on a GPU.`);
+      console.error(`speak: VoxCPM2 is speaking ${list.length} part(s)${checkpoint ? '' : ' after the download'}, about 3 s per sentence on a GPU.`);
       const listFile = join(dir, 'sentences.json');
       writeFileSync(listFile, JSON.stringify(list));
-      const args = ['run', '--quiet', runner, '--sentences', listFile, '--dir', dir, '--model', checkpoint ?? VOXCPM];
+      const args = ['run', '--quiet', runner, '--sentences', listFile, '--dir', dir, '--model', checkpoint ?? VOXCPM, '--cfg', String(cfg), '--steps', String(steps)];
       if (voice && designing) args.push('--voice', voice);
+      if (style && !designing) args.push('--style', style);
       if (reference) args.push('--reference', reference);
       else if (!designing) args.push('--reference', anchorFile);
       // The runner's own output (compiler warnings, library notices) stays out of the way: its progress lines show,
       // and everything else only when it fails.
       const r = spawnSync('uv', args, { stdio: ['ignore', 'pipe', 'pipe'], env, encoding: 'utf8', maxBuffer: 1 << 28 });
       for (const line of `${r.stderr}`.split('\n')) if (/^voxcpm: /.test(line)) console.error(`  ${line}`);
+      if (r.status !== 0 && /OutOfMemoryError|CUDA out of memory/.test(r.stderr)) {
+        const gpu = nvidiaGpu();
+        throw new Error(`speak: VoxCPM2 ran out of GPU memory: ${gpu ? `${gpu.freeGb.toFixed(1)} of ${gpu.gb.toFixed(0)} GB free` : 'the GPU is full'}, and it needs about 8 GB. Another process holds the rest (nvidia-smi lists it). Run again once it ends, or pass --engine kokoro for English.`);
+      }
       if (r.status !== 0) throw new Error(`speak: VoxCPM2 exited ${r.status}:\n${`${r.stdout}\n${r.stderr}`.trim().split('\n').slice(-25).join('\n')}`);
-      for (const s of list) copyFileSync(join(dir, `seg-${String(s.index).padStart(3, '0')}.wav`), takeFile(s));
+      if (!designing) for (const s of list) copyFileSync(join(dir, `seg-${String(s.index).padStart(3, '0')}.wav`), takeFile(s));
     };
     if (anchorFile && !existsSync(anchorFile)) {
-      // The designed voice: phrase 1 spoken from the description alone. Its take is also phrase 1's first take.
-      const first = { index: 0, text: said[0], seed };
-      generate([first], true);
+      console.error(`speak: designing the voice from --voice, speaking the script's opening: "${opening.join(' ')}"`);
+      generate([{ index: 0, text: opening.join(' '), seed }], true);
       copyFileSync(join(dir, 'anchor.wav'), anchorFile);
     }
-    // The take chosen for each phrase is recorded beside the audio, so a later run (a new speed, one reworded line)
-    // keeps it, re-rolled takes included. An explicit --seed starts over. A re-rolled phrase draws a fresh seed.
-    const record = out.replace(/\.[^./]+$/, '') + '.takes.json';
-    let chosen = {};
-    try {
-      chosen = freshSeed ? {} : JSON.parse(readFileSync(record, 'utf8'));
-    } catch {}
-    const fresh = new Map(reroll.map((n) => [n - 1, 100000 + Math.floor(Math.random() * 900000)]));
-    const best = new Array(said.length).fill(null);
+    // The voice sits beside the audio too: listen to it before judging the rest, and pass it as --reference to give
+    // another video the same voice.
+    const voiceFile = anchorFile ? out.replace(/\.[^./]+$/, '') + '.voice.wav' : null;
+    if (voiceFile) copyFileSync(anchorFile, voiceFile);
     // A take, tidied (edges faded) and heard: the check hears what is used. Glitches a listener hears (clicks, a
     // thump, a cut-off end) fail the take like a wrong word does.
     const judge = async (s) => {
@@ -412,9 +478,9 @@ async function voxcpm(script, { voice = '', reference = '', device, seed = 7, fr
       const tidied = take.replace(/\.wav$/, '.tidy.wav');
       const t = tidy(samples(take));
       if (!existsSync(tidied)) writeFileSync(tidied, wav([t.samples], 48000).buf);
-      const c = await heardCheck(tidied, s.text, language);
+      const c = await heardCheck(tidied, spoken(s.text), language);
       const pops = clicks(t.samples);
-      const faults = [...t.faults, ...(pops.length ? [`a click at ${pops.map((v) => `${v}s`).join(', ')} into the phrase`] : [])];
+      const faults = [...t.faults, ...(pops.length ? [`a click at ${pops.map((v) => `${v}s`).join(', ')} into the part`] : [])];
       if (faults.length) {
         c.ok = false;
         c.why = [c.why, ...faults].filter(Boolean).join(', ');
@@ -422,41 +488,76 @@ async function voxcpm(script, { voice = '', reference = '', device, seed = 7, fr
       }
       return { ...c, file: tidied, seed: s.seed };
     };
-    // A re-rolled phrase competes with the take it had: a worse draw never replaces a better one.
-    for (const i of fresh.keys()) {
-      const prev = chosen[said[i]];
-      if (prev != null && existsSync(takeFile({ text: said[i], seed: prev }))) best[i] = await judge({ index: i, text: said[i], seed: prev });
-    }
-    let todo = said.map((text, index) => ({ index, text, seed: fresh.get(index) ?? chosen[text] ?? seed + index }));
-    for (const [i, s] of fresh) console.error(`speak: phrase ${i + 1} re-rolled with seed ${s}.`);
-    for (let attempt = 0; attempt < 3 && todo.length; attempt++) {
-      const missing = todo.filter((s) => !existsSync(takeFile(s)));
-      if (missing.length) generate(missing);
-      const made = new Set(missing.map((s) => s.index));
-      const again = [];
-      for (const s of todo) {
-        const c = await judge(s);
-        if (!best[s.index] || c.badness < best[s.index].badness) best[s.index] = c;
-        if (!c.ok) {
-          const retry = { ...s, seed: s.seed + 1000 };
-          // Say why whenever a new take follows, or this one is new. A cached failure with a cached retry is quiet.
-          if (made.has(s.index) || (attempt < 2 && !existsSync(takeFile(retry)))) console.error(`speak: phrase ${s.index + 1} (seed ${s.seed}): ${c.why}. Heard: "${c.heard}".${attempt < 2 ? ' Regenerating.' : ''}`);
-          again.push(retry);
-        }
+    // The best take of each part: its recorded take, else seed + index, retried with new seeds. A re-rolled part
+    // draws a fresh seed and competes with the take it had, so a worse draw never replaces a better one.
+    const pick = async (list, rolls) => {
+      const said = list.map((u) => u.text);
+      const fresh = new Map(rolls.map((n) => [n - 1, 100000 + Math.floor(Math.random() * 900000)]));
+      const best = new Array(said.length).fill(null);
+      for (const i of fresh.keys()) {
+        const prev = chosen[said[i]];
+        if (prev != null && existsSync(takeFile({ text: said[i], seed: prev }))) best[i] = await judge({ index: i, text: said[i], seed: prev });
       }
-      todo = again;
+      let todo = said.map((text, index) => ({ index, text, seed: fresh.get(index) ?? chosen[text] ?? seed + index }));
+      for (const [i, s] of fresh) console.error(`speak: part ${i + 1} re-rolled with seed ${s}.`);
+      for (let attempt = 0; attempt < 3 && todo.length; attempt++) {
+        const missing = todo.filter((s) => !existsSync(takeFile(s)));
+        if (missing.length) generate(missing);
+        const made = new Set(missing.map((s) => s.index));
+        const again = [];
+        for (const s of todo) {
+          const c = await judge(s);
+          if (!best[s.index] || c.badness < best[s.index].badness) best[s.index] = c;
+          if (!c.ok) {
+            const retry = { ...s, seed: s.seed + 1000 };
+            // Say why whenever a new take follows, or this one is new. A cached failure with a cached retry is quiet.
+            if (made.has(s.index) || (attempt < 2 && !existsSync(takeFile(retry)))) console.error(`speak: part ${s.index + 1} (seed ${s.seed}): ${c.why}. Heard: "${c.heard}".${attempt < 2 ? ' Regenerating.' : ''}`);
+            again.push(retry);
+          }
+        }
+        todo = again;
+      }
+      return best;
+    };
+    let best = await pick(units, reroll);
+    // A beat that failed every take is spoken sentence by sentence: shorter inputs keep the model stable. Each
+    // sentence remembers its beat, so the phrase spans stay one per beat.
+    let origin = units.map((_, i) => i);
+    const split = units.map((u, i) => !best[i].ok && u.sentences.length > 1);
+    if (split.some(Boolean)) {
+      console.error(`speak: part(s) ${split.map((s, i) => (s ? i + 1 : null)).filter(Boolean).join(', ')} failed every take whole, so their sentences are spoken one by one.`);
+      const next = [];
+      const from = [];
+      units.forEach((u, i) => {
+        const parts = split[i] ? u.sentences.map((p, k) => ({ text: p.text, pause: k === u.sentences.length - 1 ? u.pause : p.pause, sentences: [p] })) : [u];
+        for (const p of parts) {
+          next.push(p);
+          from.push(i);
+        }
+      });
+      units = next;
+      origin = from;
+      best = await pick(units, []);
     }
     const parts = best.flatMap((b, i) => [samples(b.file), new Float32Array(Math.round(units[i].pause * 48000))]);
     const r = wav(parts, 48000);
     writeFileSync(out, r.buf);
-    writeFileSync(record, JSON.stringify(Object.fromEntries(best.map((b, i) => [said[i], b.seed])), null, 1));
-    const failed = best.map((b, i) => ({ ...b, i })).filter((b) => !b.ok);
+    writeFileSync(record, JSON.stringify({ seed, takes: Object.fromEntries(best.map((b, i) => [units[i].text, b.seed])) }, null, 1));
     const placed = spans(units, parts, 48000);
+    // One span per beat, however it was spoken.
+    const beatSpans = [];
+    placed.forEach((p, k) => {
+      const last = beatSpans[beatSpans.length - 1];
+      if (last && last.origin === origin[k]) Object.assign(last, { text: `${last.text} ${p.text}`, end: p.end });
+      else beatSpans.push({ ...p, origin: origin[k] });
+    });
+    const failed = best.map((b, i) => ({ ...b, i })).filter((b) => !b.ok);
     return {
       duration: r.duration,
-      phrases: placed,
-      checks: best.map((b, i) => ({ at: placed[i].start, text: said[i], ok: b.ok, heard: b.heard, why: b.why, seed: b.seed, doubt: b.doubt ?? [] })),
-      problems: failed.map((b) => `phrase ${b.i + 1} "${said[b.i]}": ${b.why} (heard "${b.heard}"). Three takes failed, so reword it first (a longer line, another word order). --reroll ${b.i + 1} draws new takes.`),
+      phrases: beatSpans.map(({ origin: _, ...p }) => ({ ...p, text: spoken(p.text) })),
+      voiceFile,
+      checks: best.map((b, i) => ({ at: placed[i].start, text: spoken(units[i].text), ok: b.ok, heard: b.heard, why: b.why, seed: b.seed, doubt: b.doubt ?? [] })),
+      problems: failed.map((b) => `part ${b.i + 1} "${units[b.i].text}": ${b.why} (heard "${b.heard}"). Three takes failed, so reword it first (a longer line, another word order). --reroll ${b.i + 1} draws new takes.`),
     };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -468,9 +569,31 @@ async function voxcpm(script, { voice = '', reference = '', device, seed = 7, fr
 const syllables = (text) => (text.toLowerCase().normalize('NFKD').match(/[aeiouy]+/g) ?? []).length;
 
 // Speaking pace: syllables per second while speaking (pauses left out). Explainers read best around 4-5.
-export function pace(phrases) {
-  const talk = phrases.reduce((t, p) => t + (p.end - p.start), 0);
+// With the audio file, each span counts only from its first sound to its last: the silence at a phrase's edges does
+// not scale with the speed, so counting it made the suggested --speed overshoot.
+export function pace(phrases, file) {
+  const audio = file ? samples(file) : null;
+  const talk = phrases.reduce((t, p) => t + (audio ? sounding(audio, p.start, p.end) : p.end - p.start), 0);
   return talk > 0 ? phrases.reduce((n, p) => n + syllables(p.text), 0) / talk : 0;
+}
+
+// Seconds from the first to the last 10 ms frame louder than 5% of the span's peak (and above the noise floor).
+function sounding(audio, start, end, rate = 48000) {
+  const hop = rate / 100;
+  const a = Math.floor(start * rate);
+  const b = Math.min(audio.length, Math.ceil(end * rate));
+  const rms = [];
+  for (let i = a; i + hop <= b; i += hop) {
+    let s = 0;
+    for (let k = i; k < i + hop; k++) s += audio[k] * audio[k];
+    rms.push(Math.sqrt(s / hop));
+  }
+  const floor = Math.max(0.005, Math.max(0, ...rms) * 0.05);
+  const first = rms.findIndex((v) => v > floor);
+  if (first < 0) return 0;
+  let last = rms.length - 1;
+  while (rms[last] <= floor) last--;
+  return (last - first + 1) / 100;
 }
 
 // Slows or quickens speech without changing its pitch (ffmpeg atempo), and the phrase spans with it.
@@ -486,13 +609,13 @@ function stretch(out, spans, speed) {
 // Places each line of a timed script at its time: the line's phrases, with their own pauses, start at the time
 // the script asks for, or right after the line before when that one runs past it. Rewrites the WAV at `out` and
 // returns the new phrase spans and the lines that could not start on time or overrun their slot.
-function placeOnTimes(out, spoken, cues) {
+function placeOnTimes(out, spoken, cues, units = (t) => phrases(t).length) {
   const rate = 48000;
   const audio = samples(out);
   const blocks = [];
   let p = 0;
   for (const c of cues) {
-    const n = phrases(c.text).length;
+    const n = units(c.text);
     const list = spoken.slice(p, p + n);
     p += n;
     blocks.push({ cue: c, list, from: list[0].start, to: list[list.length - 1].end });
@@ -516,39 +639,62 @@ function placeOnTimes(out, spoken, cues) {
   return { duration: r.duration, phrases: placed, late };
 }
 
+// The engine when no flag or config names one: the best this machine runs. VoxCPM2 when its GPU and uv are here, else
+// Kokoro, which speaks English only. A Kokoro voice name (af_heart) picks Kokoro. A recording to clone picks VoxCPM2.
+export function defaultEngine({ voice, reference, language } = {}) {
+  if (voice && /^[ab][fm]_[a-z]+$/.test(voice)) return 'kokoro';
+  const vox = voxcpmReady();
+  if (vox.ok || reference) return 'voxcpm';
+  if (language && !/^en/i.test(language)) {
+    throw new Error(`speak --language ${language}: Kokoro speaks English only, and VoxCPM2 ${vox.why}. Pass --model facebook/mms-tts-<iso> (CPU, non-commercial license) or --command with the user's TTS (references/tts.md).`);
+  }
+  return 'kokoro';
+}
+
 // Speaks the script into a WAV at `out`. Returns { duration, engine }.
 // opts.cues: the lines of a timed script ([{ start, end, text }]); each line is then placed at its time.
 export async function speak(script, out, opts = {}) {
-  const speed = opts.speed ?? config().tts?.speed ?? 1;
+  const tts = config().tts ?? {};
+  if (!opts.engine && !opts.command && !opts.model && !tts.engine && !tts.command && !tts.model) opts = { ...opts, engine: defaultEngine(opts) };
+  // Only VoxCPM2 voices the non-verbal tags. Every other engine would read them out as words.
+  if ((opts.engine ?? (opts.command || opts.model ? null : tts.engine)) !== 'voxcpm' && TAGS.test(script)) {
+    if (!opts.stretched && !opts.lines) console.error('speak: only VoxCPM2 voices tags like [laughing] or [sigh]. This engine speaks the script without them.');
+    script = withoutTags(script);
+  }
+  TAGS.lastIndex = 0;
+  const speed = opts.speed ?? tts.speed ?? 1;
   if (!(speed >= 0.5 && speed <= 2)) throw new Error(`speak --speed ${speed}: use 0.5 to 2 (0.9 is 10% slower).`);
   // Kokoro sets its own speed. Every other engine is time-stretched once its audio is joined.
+  // A timed script's lines are placed one by one: VoxCPM2 speaks each line apart, and the spans count that way.
+  const voxcpmEngine = (opts.engine ?? (opts.command || opts.model ? null : tts.engine)) === 'voxcpm';
+  const units = voxcpmEngine ? (t) => chunks(t, { lines: true }).length : (t) => phrases(t).length;
   if (speed !== 1 && !opts.stretched) {
-    const kokoroEngine = !(opts.engine ?? config().tts?.engine) && !opts.command && !config().tts?.command && /kokoro/i.test(opts.model ?? config().tts?.model ?? KOKORO);
+    const eng = opts.engine ?? (opts.command || opts.model ? null : tts.engine);
+    const kokoroEngine = eng === 'kokoro' || (!eng && !(opts.command ?? (opts.model ? null : tts.command)) && /kokoro/i.test(opts.model ?? tts.model ?? KOKORO));
     if (!kokoroEngine) {
-      const r = await speak(script, out, { ...opts, speed: 1, stretched: true, cues: null });
+      const r = await speak(script, out, { ...opts, speed: 1, stretched: true, cues: null, lines: !!opts.cues });
       const s = stretch(out, r.phrases, speed);
       const done = { ...r, ...s, checks: r.checks?.map((c) => ({ ...c, at: +(c.at / speed).toFixed(2) })) };
       if (!opts.cues) return done;
-      const p = placeOnTimes(out, done.phrases, opts.cues);
+      const p = placeOnTimes(out, done.phrases, opts.cues, units);
       return { ...done, duration: p.duration, phrases: p.phrases, timing: p.late };
     }
   }
   if (opts.cues) {
-    const r = await speak(opts.cues.map((c) => c.text).join('\n'), out, { ...opts, cues: null });
+    const r = await speak(opts.cues.map((c) => c.text).join('\n'), out, { ...opts, cues: null, lines: true });
     if (!r.phrases) return { ...r, problems: [...(r.problems ?? []), 'This engine speaks the script in one piece, so its lines cannot be placed at their times. Run the command without --one-call, or use Kokoro, VoxCPM2 or --model.'] };
-    const p = placeOnTimes(out, r.phrases, opts.cues);
+    const p = placeOnTimes(out, r.phrases, opts.cues, units);
     return { ...r, duration: p.duration, phrases: p.phrases, timing: p.late };
   }
-  const tts = config().tts ?? {};
   const engine = opts.engine ?? (opts.command || opts.model ? null : tts.engine);
   if (engine === 'voxcpm') {
     const voice = opts.voice ?? tts.voice ?? '';
-    const r = await voxcpm(script, { voice, reference: opts.reference ?? tts.reference ?? '', device: opts.device, seed: opts.seed ?? tts.seed ?? 7, freshSeed: opts.seed != null, language: opts.language, reroll: opts.reroll ?? [] }, out);
+    const r = await voxcpm(script, { voice, reference: opts.reference ?? tts.reference ?? '', style: opts.style ?? tts.style ?? '', cfg: opts.cfg ?? tts.cfg ?? 1.6, steps: opts.steps ?? tts.steps ?? 16, device: opts.device, seed: opts.seed, configSeed: tts.seed, language: opts.language, reroll: opts.reroll ?? [], lines: !!opts.lines }, out);
     return { ...r, engine: `VoxCPM2${voice ? ` ${voice}` : ''}` };
   }
   if (engine && engine !== 'kokoro') throw new Error(`speak --engine "${engine}": use kokoro or voxcpm, or --model / --command for other engines.`);
   const cmd = opts.command ?? (opts.model || engine ? null : tts.command);
-  const model = opts.model ?? tts.model ?? KOKORO;
+  const model = opts.model ?? (engine === 'kokoro' ? KOKORO : tts.model ?? KOKORO);
   const voice = opts.voice ?? tts.voice ?? DEFAULT_VOICE;
   let result;
   if (cmd) {

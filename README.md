@@ -65,12 +65,12 @@ Output: `out/video.mp4` (master) and `out/video-compressed.mp4`, about a quarter
 
 | Engine                  | Languages                                               | Machine                          |
 | ----------------------- | ------------------------------------------------------- | -------------------------------- |
-| Kokoro (default)        | English                                                 | Any, CPU only included           |
 | VoxCPM2                 | 30, with described or cloned voices                     | NVIDIA GPU with 8 GB, and `uv`   |
+| Kokoro                  | English                                                 | Any, CPU only included           |
 | Any Hugging Face model  | The model's, such as MMS-TTS in 1,100+ (non-commercial) | Any, CPU only included, and `uv` |
 | Any TTS you already use | The tool's                                              | Wherever it runs                 |
 
-`node scripts/video.mjs doctor` shows which of these your machine runs. Languages, hardware and adding your own voice or model: `references/tts.md`.
+The default is the best one your machine runs: VoxCPM2 with that GPU, else Kokoro. `node scripts/video.mjs doctor` shows which of these your machine runs. Languages, hardware and adding your own voice or model: `references/tts.md`.
 
 ## CLI
 
