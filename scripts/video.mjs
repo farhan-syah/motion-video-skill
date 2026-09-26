@@ -259,7 +259,8 @@ async function mapCmd(opts) {
     return;
   }
   if (!opts.out) throw new ManifestError('map needs --out, for example --out assets/map-route.svg.');
-  const m = existsSync(opts.manifest) ? loadManifest(opts.manifest) : null;
+  // Only the size and fps are read here: a voiceover that does not fit the scenes yet does not matter.
+  const m = existsSync(opts.manifest) ? loadManifest(opts.manifest, { voiceoverFits: false }) : null;
   const [width, height] = opts.size ? opts.size.split('x').map(Number) : [m?.width ?? 1920, m?.height ?? 1080];
   if (!width || !height) throw new ManifestError(`map --size "${opts.size}" must be WxH, for example 1080x1920.`);
   const list = (v) => (v ? v.split(',').map((x) => x.trim()).filter(Boolean) : []);
@@ -304,7 +305,10 @@ async function speakCmd(opts) {
   // Pace: an explainer reads best around 4.5-5.5 syllables a second while speaking. Faster tires the listener.
   const { pace } = await import('./lib/speak.mjs');
   const rate = phrases ? pace(phrases) : null;
-  if (rate) console.log(`Pace: ${rate.toFixed(1)} syllables per second while speaking${rate > 5.5 ? `, fast for an explainer: run again with --speed ${Math.max(0.75, Math.round((5 / rate) * 20) / 20)}` : rate < 3.6 ? ', slow: try --speed 1.1' : ''}.`);
+  // The suggestion aims at 5 and scales the speed this take was made with.
+  const at = opts.speed ?? 1;
+  const aim = Math.round(Math.min(1.5, Math.max(0.6, (at * 5) / rate)) * 100) / 100;
+  if (rate) console.log(`Pace: ${rate.toFixed(1)} syllables per second while speaking${rate > 5.5 ? `: fast for an explainer. Run again with --speed ${aim}.` : rate < 4.5 ? `: slow for an explainer. Run again with --speed ${aim}.` : ': in the range an explainer reads best (4.5 to 5.5).'}`);
   if (cues) {
     console.log(`Timed script: ${cues.length} lines placed at their times.`);
     for (const t of timing) console.log(`  ${t}`);
@@ -322,7 +326,7 @@ async function speakCmd(opts) {
 Next: set "voiceover": { "file": "${rel(out)}", "script": "${rel(txt)}" } in video.json, then run transcribe.`);
   // Every phrase as it was heard back, so a wrong word shows even when the check passes it.
   console.log('\nHeard back, phrase by phrase:');
-  for (const c of checks) console.log(`  ${c.ok ? 'ok  ' : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}`);
+  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.doubt?.length ? `\n        both recognizers heard ${c.doubt.map((w) => `"${w}"`).join(', ')} differently: listen to it, and --reroll this phrase if it is said wrong` : ''}`);
   if (problems.length) {
     console.log(`\nThe speech check found ${problems.length} problem(s), heard back with Whisper:`);
     for (const p of problems) console.log(`  ${p}`);
@@ -382,7 +386,8 @@ async function transcribeCmd(m, opts) {
 function footage(opts) {
   const file = opts.rest[0];
   if (!file || !existsSync(file)) throw new ManifestError(`footage: "${file ?? ''}" is not a video file. Pass the clip's path.`);
-  const m = existsSync(opts.manifest) ? loadManifest(opts.manifest) : null;
+  // Only the size and fps are read here: a voiceover that does not fit the scenes yet does not matter.
+  const m = existsSync(opts.manifest) ? loadManifest(opts.manifest, { voiceoverFits: false }) : null;
   const fps = opts.fps ?? m?.fps ?? 30;
   const width = opts.width ?? m?.width ?? 1920;
   const name = opts.name ?? file.split('/').pop().replace(/\.[^.]+$/, '').replace(/[^\w-]+/g, '-');
@@ -789,9 +794,10 @@ async function audit(m) {
   console.log('soundtrack review:');
   console.log(`  density     ${effects.length} effects in ${a.duration.toFixed(1)}s (${((effects.length / a.duration) * 10).toFixed(1)} per 10 s)${keys ? `, plus ${keys} typing key sounds, not synced one by one` : ''}`);
   console.log(`  families    ${families.map(([k, n]) => `${k} x${n}`).join(', ')}${families[0] && families[0][1] / effects.length > 0.4 && effects.length >= 5 ? `  <- "${families[0][0]}" carries ${Math.round((families[0][1] / effects.length) * 100)}% of the effects` : ''}`);
-  console.log(`  repeats     ${repeats.length ? repeats.map((l) => `${l[0].sound} x${l.length} identical at ${l.map((c) => c.event.toFixed(2)).join(', ')}s`).join('; ') : 'none: every repeat varies'}`);
+  // A motif repeats one sound on purpose. Only other identical repeats are listed.
   const motifs = Object.entries(effects.filter((c) => c.motif).reduce((o, c) => ({ ...o, [c.sound]: (o[c.sound] ?? 0) + 1 }), {}));
-  if (motifs.length) console.log(`  motif       ${motifs.map(([k, n]) => `${k} x${n}`).join(', ')}: one variant and pitch on purpose`);
+  console.log(`  repeats     ${repeats.length ? repeats.map((l) => `${l[0].sound} x${l.length} identical at ${l.map((c) => c.event.toFixed(2)).join(', ')}s`).join('; ') : `none unplanned${motifs.length ? '' : ': every repeat varies'}`}`);
+  if (motifs.length) console.log(`  motif       ${motifs.map(([k, n]) => `${k} x${n}`).join(', ')}: the same variant and pitch on purpose`);
   console.log(`  quiet spans ${gaps.length ? gaps.join(', ') : 'none over 3 s'}`);
   const tpFail = Number.isFinite(tp) && tp > ceiling + 0.05;
   console.log(`${tpFail ? 'FAIL' : '    '}  true peak   ${Number.isFinite(tp) ? `${tp.toFixed(1)} dBTP` : 'none'} in the delivered file (ceiling ${ceiling} dBTP)`);
@@ -994,7 +1000,8 @@ async function main() {
     await transcribeCmd({ outDir: resolve('out') }, opts);
     return 0;
   }
-  const m = loadManifest(opts.manifest, { voiceoverFits: cmd !== 'transcribe' });
+  // Only the commands that draw frames need the scenes to hold the whole voiceover.
+  const m = loadManifest(opts.manifest, { voiceoverFits: ['check', 'still', 'render'].includes(cmd) });
   if (cmd === 'transcribe') {
     await transcribeCmd(m, opts);
     if (m.voiceoverOverrun > 0) console.log(`The voiceover runs ${m.voiceoverOverrun.toFixed(2)}s past the video's end. Size the scenes to its words above, so the video holds all of it.`);
