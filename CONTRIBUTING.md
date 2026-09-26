@@ -1,7 +1,5 @@
 # Contributing
 
-Thank you for helping. This page says what the skill accepts, what it does not, and how to send a change.
-
 ## What this skill is
 
 A toolkit an AI agent uses to direct and render a video. The skill supplies tools, checks and knowledge. The agent supplies the idea. Every change keeps that split.
@@ -21,32 +19,32 @@ A toolkit an AI agent uses to direct and render a video. The skill supplies tool
 ## What we do not accept
 
 - **Vendor lock:** code or docs that assume one AI vendor, one agent tool, or one cloud service.
-- **Network during a render:** fetches happen in setup commands (`font`, `lib`, `speak` model downloads, `update`), never inside `check`, `render` or `audit`.
+- **Network during a render:** fetches belong only in setup commands (`font`, `lib`, `speak` model downloads, `update`), never in `check`, `render` or `audit`.
 - **Telemetry,** analytics, or any call home.
-- **Creative defaults:** a preset palette, a signature font, a stock sound on every video, or a template layout. The skill offers range. The agent chooses.
+- **Creative defaults:** a preset palette, a signature font, a stock sound on every video, or a template layout.
 - **Brands:** another company's name, logo, palette or type used as a default or an example.
 - **Generated live-action footage,** or voice cloning without the speaker's consent.
 - **Heavy dependencies** for a small gain. A new package needs a reason the existing ones cannot meet.
 
 ## How to send a change
 
-1. **Open an issue first** for anything larger than a fix, so we agree on the approach before you build it.
+1. **Open an issue first** to agree the approach for anything larger than a fix.
 2. **Branch from `main`.** One topic per pull request.
 3. **Run the tests:** `cd scripts && node --test lib/`. All pass.
-4. **Try it on a video:** run `check` and `render` on a small project that uses your change. Put the result in the pull request (the `check` summary, the `audit` line, a frame of the sheet).
+4. **Try it on a video:** run `check` and `render` on a small project that uses your change. Put the `check` summary, the `audit` line and a frame of the sheet in the pull request.
 5. **Update the docs** the change touches (`SKILL.md`, `references/`, `README.md`).
 6. **Add a line to `CHANGELOG.md`** under `[Unreleased]`, in `Added`, `Changed` or `Fixed`.
 
 ## Style
 
-- **Code:** plain JavaScript modules for Node 20+. Match the surrounding code. A comment says why, not what.
+- **Code:** plain JavaScript modules for Node 20+. Match the surrounding code. A comment says why, never what.
 - **Writing:** short sentences in the present tense. Commands and paths exactly as typed.
 - **Commits:** an imperative subject line that says what changed ("Place appearance sounds on their fastest change").
 
 ## Releases
 
-The maintainer sets the version in `scripts/package.json`, moves `[Unreleased]` in `CHANGELOG.md` under the new version and date, and tags the commit `vX.Y.Z`.
+The maintainer sets the version in `scripts/package.json` and moves `[Unreleased]` in `CHANGELOG.md` under the new version and date. Then they tag the commit `vX.Y.Z`.
 
 ## License
 
-By contributing, you agree that your contribution is licensed under the MIT License of this repository.
+Contributions are licensed under this repository's MIT License.

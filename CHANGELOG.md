@@ -24,9 +24,9 @@ First release.
 
 **Sound**
 
-- Synthesized effects bound to the motion that makes them: pops, hits, whooshes, strokes, UI sounds and more, tuned to a key, a material and an energy arc.
+- Synthesized effects bound to their motion, tuned to a key, a material and an energy arc.
 - The user's music, cut to its beats with `beats`.
-- Voice, music and effects mix together. Music and effects duck under speech, loudness is normalized, and the true peak is held.
+- One mix: music and effects duck under speech, loudness is normalized, the true peak is held.
 - Under narration, effects sit in pauses and never on a word.
 
 **Narration**
