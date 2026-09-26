@@ -226,7 +226,9 @@ export async function auditVideo(cueLog) {
     if (mv.peak < floor) return { mv, region, deltaMs: null, fail: `no visible motion in its element's box within 0.6 s (peak change ${mv.peak.toFixed(2)} under floor ${floor.toFixed(2)})` };
     // Contact and appear sounds must fall inside their motion segment. Swells center on its peak. Strokes start with it.
     // An appearance is taken in at its fastest change, so its sound is judged against that frame, not the whole motion.
-    const grown = cls === 'appear' ? growthPeak(pixels, mv) : null;
+    // How much of an element shows is measured over its whole box. The sparse mask holds only its high-contrast
+    // pixels (text, a border), which settle last as text scales into place, and would place the peak late.
+    const grown = cls === 'appear' ? growthPeak(inBox, mv) : null;
     const delta = cls === 'appear' ? (event - (grown ?? mv.peakAt)) * 1000 : cls === 'swell' ? (event - mv.peakAt) * 1000 : cls === 'stroke' ? (event - mv.start) * 1000 : event < mv.start ? (event - mv.start) * 1000 : event > mv.settle ? (event - mv.settle) * 1000 : 0;
     const tol = CLASS[cls];
     const fail = delta < -tol.early ? `${Math.round(-delta)} ms early: it ${tol.rule}` : delta > tol.late ? `${Math.round(delta)} ms late: it ${tol.rule}` : null;

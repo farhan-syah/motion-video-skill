@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Fixed
 
 - `transcribe` drops words a recognizer invents in digital silence.
+- The audit measures an appearance over the element's whole box, so text scaling into place no longer marks a correctly placed sound as early.
 - The palette guidance no longer gives genre example palettes.
 
 ## [1.2.0] - 2026-09-26
