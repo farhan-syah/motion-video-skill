@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 
-import { MATERIAL_AWARE, PITCH_RANGE, SOUND_META, SOUNDS, SPAN, SPANNING } from './sound-catalog.mjs';
+import { APPEAR, MATERIAL_AWARE, PITCH_RANGE, SOUND_META, SOUNDS, SPAN, SPANNING } from './sound-catalog.mjs';
 import { MATERIALS, modal, struckFloor } from './sound-synth.mjs';
 import { DEFAULT_KEY, keyFactor, thirdRatio } from './sound-tuning.mjs';
 
@@ -381,6 +381,22 @@ function arrived(p, fin, size) {
   );
 }
 
+// How much of an element's change is left, 0 (arrived) to 1 (where it started): the largest share left in any
+// property that changes by a visible amount.
+function remaining(p, first, fin, size) {
+  const px = Math.max(2, 0.02 * size);
+  const share = (a, from, to, visible) => (Math.abs(to - from) < visible ? 0 : Math.abs(a - to) / Math.abs(to - from));
+  const move = Math.hypot(first.tx - fin.tx, first.ty - fin.ty, first.tz - fin.tz);
+  return Math.max(
+    share(p.scale, first.scale, fin.scale, 0.05),
+    move < px ? 0 : Math.hypot(p.tx - fin.tx, p.ty - fin.ty, p.tz - fin.tz) / move,
+    share(p.rot, first.rot, fin.rot, 5),
+    share(p.opacity, first.opacity, fin.opacity, 0.1),
+    share(p.blur, first.blur, fin.blur, 0.75),
+    ...p.matrix.slice(0, 4).map((v, i) => share(v, first.matrix[i], fin.matrix[i], 0.1)),
+  );
+}
+
 // Steps one element's animation frame by frame. Returns its final box, the first frame where it has visibly arrived
 // (its own animated properties within tolerance of their final values), and how far and fast it travelled.
 async function measureMotion(page, seek, sel, span, fps) {
@@ -393,12 +409,41 @@ async function measureMotion(page, seek, sel, span, fps) {
   await seek(start);
   const first = await page.evaluate(probeElement, sel);
   let arrival = null;
+  let landing = null;
+  let prevRem = null;
+  let fastestChange = 0.02;
+  const shown = (x) => x.o * Math.abs(x.props.matrix[0] * x.props.matrix[3] - x.props.matrix[1] * x.props.matrix[2]) * x.props.scale ** 2;
+  const fades = !!first && Math.abs(shown(fin) - shown(first)) > 0.2 * Math.max(shown(fin), 1e-6);
+  // The box the element sweeps through from its first frame to its landing: a moving sound belongs to all of it.
+  const sweep = { l: fin.x, t: fin.y, r: fin.x + fin.w, b: fin.y + fin.h };
+  const grow = (s) => {
+    sweep.l = Math.min(sweep.l, s.x);
+    sweep.t = Math.min(sweep.t, s.y);
+    sweep.r = Math.max(sweep.r, s.x + s.w);
+    sweep.b = Math.max(sweep.b, s.y + s.h);
+  };
   // Centers per frame: the fastest step places a slide's crest, and the net sideways travel sets its pan.
   const path = [];
   for (let t = start; t <= span.end + 1; t += 1000 / fps) {
     await seek(t);
     const s = await page.evaluate(probeElement, sel);
-    if (s) path.push({ t, x: s.x + s.w / 2, y: s.y + s.h / 2 });
+    if (s) {
+      path.push({ t, x: s.x + s.w / 2, y: s.y + s.h / 2 });
+      if (s.o > 0.05) grow(s);
+    }
+    // Appearance: the frame where the element changes fastest (scale, opacity, position together), where the eye
+    // takes it in. An ease-out entrance changes fastest at its start, a spring near its end.
+    // An element that grows or fades in is measured by how much of it shows (opacity times area), as the eye sees
+    // it: a pop from zero scale grows in area fastest well after its scale does. One that only moves is measured by
+    // how much of its move is left.
+    if (s && first) {
+      const rem = fades ? 1 - Math.min(1, shown(s) / Math.max(shown(fin), 1e-6)) : remaining(s.props, first.props, fin.props, size);
+      if (prevRem != null && prevRem - rem > fastestChange) {
+        fastestChange = prevRem - rem;
+        landing = t - 500 / fps;
+      }
+      prevRem = rem;
+    }
     if (s && arrived(s.props, fin.props, size)) {
       arrival = t;
       break;
@@ -420,7 +465,7 @@ async function measureMotion(page, seek, sel, span, fps) {
   // crest: where the fastest frame falls in the move. A move longer than the longest swoosh plays a shorter sound,
   // so the crest is kept as a fraction for the sound's shape, and peakAt (absolute ms) places it.
   const crest = fastest > 0 ? (peakAt - start) / (moveDur * 1000) : null;
-  return { fin, arrival, size: size * to1080, distance, dx, crest, peakAt: fastest > 0 ? peakAt : null, speed: distance / moveDur, moveDur };
+  return { fin, landing, sweep: { l: sweep.l, t: sweep.t, w: sweep.r - sweep.l, h: sweep.b - sweep.t }, arrival, size: size * to1080, distance, dx, crest, peakAt: fastest > 0 ? peakAt : null, speed: distance / moveDur, moveDur };
 }
 
 // Replaces guessed impact fractions with measured motion, before any frame is captured:
@@ -441,7 +486,7 @@ export async function measureImpacts(page, seek, cues, fps) {
         const mm = await measureMotion(page, seek, `[data-sfx-sub="${sub.key}"]`, sub.span, fps);
         if (!mm) continue;
         const f = mm.fin;
-        found.push({ at: mm.arrival ?? sub.span.end, box: { l: f.x, t: f.y, w: f.w, h: f.h } });
+        found.push({ at: (APPEAR.has(c.sound) ? mm.landing : null) ?? mm.arrival ?? sub.span.end, box: { l: f.x, t: f.y, w: f.w, h: f.h } });
         box = box ? { l: Math.min(box.l, f.x), t: Math.min(box.t, f.y), r: Math.max(box.r, f.x + f.w), b: Math.max(box.b, f.y + f.h) } : { l: f.x, t: f.y, r: f.x + f.w, b: f.y + f.h };
       }
       if (!found.length) continue;
@@ -469,6 +514,7 @@ export async function measureImpacts(page, seek, cues, fps) {
     // A counter or drawn stroke changes content, not position: its move lasts its whole scripted span.
     if (c.scripted) {
       mm.arrival = c.span.end;
+      mm.landing = c.span.end;
       mm.moveDur = Math.max(0.05, (c.span.end - c.span.start) / 1000);
     }
     c.box = { l: mm.fin.x, t: mm.fin.y, w: mm.fin.w, h: mm.fin.h };
@@ -478,6 +524,9 @@ export async function measureImpacts(page, seek, cues, fps) {
     c.volume *= dynamicGain(c.sound, mm);
     if (c.on != null) continue;
     // A flick starts with the swipe but stays short: it marks the start of a long scroll without spanning it.
+    // A sound that follows the move (a swoosh crests mid-path, a drag spans it) is judged where the element travels,
+    // not only where it lands.
+    if (SPAN[c.sound]?.withMove || SPAN[c.sound]?.crest || c.sound === 'flick') c.box = mm.sweep;
     if (SPAN[c.sound]?.withMove || c.sound === 'flick') {
       // A stroke, a zip, a drag, a count or a spin starts with the move and lasts as long as it.
       c.impact = Math.max(0, c.span.start);
@@ -485,6 +534,9 @@ export async function measureImpacts(page, seek, cues, fps) {
       // The sound's crest lands on the measured fastest frame. When the move outlasts the sound, the sound sits
       // around that frame instead of starting with the move.
       c.impact = mm.peakAt ?? Math.max(0, c.span.start) + soundLead(c.sound, 'peak', c.params) * 1000;
+    } else if (APPEAR.has(c.sound) && mm.landing != null) {
+      // An appearance sounds on its fastest change, where the eye takes it in, not when the last of it settles.
+      c.impact = mm.landing;
     } else if (ARRIVAL.has(c.sound) && mm.arrival != null) {
       c.impact = mm.arrival;
     } else continue;

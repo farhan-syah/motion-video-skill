@@ -186,13 +186,14 @@ export async function muxAudio(video, out, { voice = [], sfx = [], music = null,
       parts[parts.indexOf(p)] = `[${name}m]`;
       stem.push(`[${name}s]`);
     }
-    graph.push(`${stem.join('')}amix=inputs=${stem.length}:normalize=0:duration=longest,atrim=0:${total.toFixed(3)}[fxstem]`);
   }
   // The mix breathes in from silence and resolves out, instead of starting and stopping on a hard edge.
   const fadeIn = direction?.fadeIn ?? 0;
   const fadeOut = Math.min(direction?.fadeOut ?? 0, total / 2);
   const edges = [fadeIn > 0 ? `afade=t=in:d=${fadeIn.toFixed(3)}:curve=qsin` : null, fadeOut > 0 ? `afade=t=out:st=${(total - fadeOut).toFixed(3)}:d=${fadeOut.toFixed(3)}:curve=qsin` : null].filter(Boolean);
   graph.push(`${parts.join('')}amix=inputs=${parts.length}:normalize=0:duration=longest,atrim=0:${total.toFixed(3)}${edges.map((e) => `,${e}`).join('')}[aout]`);
+  // The stem carries the same fades as the mix: an effect the fade swallows is judged as silent there too.
+  if (stem) graph.push(`${stem.join('')}amix=inputs=${stem.length}:normalize=0:duration=longest,atrim=0:${total.toFixed(3)}${edges.map((e) => `,${e}`).join('')}[fxstem]`);
   // Two-pass loudness: mix to a file, measure it, then apply one linear gain. One pass drifts on short clips.
   const mixed = `${out}.mix.wav`;
   const stemOut = stem ? ['-map', '[fxstem]', '-c:a', 'pcm_f32le', '-ar', '48000', fxStem] : [];

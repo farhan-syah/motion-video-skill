@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { APPEAR } from './sound-catalog.mjs';
 import { HOP, SR, decode, features, fft } from './beats.mjs';
 import { cueSoundErrors, soundProfileErrors } from './sound-policy.mjs';
 
@@ -7,14 +8,21 @@ import { cueSoundErrors, soundProfileErrors } from './sound-policy.mjs';
 // Audio events come from spectral-flux onsets. Visual events come from frame differences inside each cue's element box.
 
 // Motion analysis frame size: a 26 px prop at 1080p still covers about 5 analysis pixels, and 30 s of frames fit in memory.
-const MW = 384;
-const MH = 216;
+// Analysis frame size, set per video with its aspect ratio kept (384 px on the long side). A fixed 16:9 frame would
+// squash a 9:16 video to a third of its height, and a thin line in it would vanish.
+let MW = 384;
+let MH = 216;
+function analysisSize(width, height) {
+  const k = 384 / Math.max(width, height);
+  MW = Math.max(2, Math.round((width * k) / 2) * 2);
+  MH = Math.max(2, Math.round((height * k) / 2) * 2);
+}
 
 // How each sound class must line up with its element's motion. Times in ms.
 // Tolerances follow ITU-R BT.1359: sound more than ~45 ms early or ~125 ms late reads as out of sync.
 const CLASS = {
   contact: { sounds: ['slam', 'thud', 'snap', 'click', 'tap', 'paper', 'stamp', 'coin', 'drop', 'shutter', 'toggle-on', 'toggle-off'], rule: 'lands inside its motion, at contact', early: 60, late: 110 },
-  appear: { sounds: ['pop', 'blip', 'tick', 'ding', 'success', 'shimmer', 'error', 'spring', 'downer', 'boom', 'pluck', 'glitch', 'sting', 'warning', 'jelly', 'hit', 'subdrop'], rule: 'sits inside the motion', early: 60, late: 110 },
+  appear: { sounds: [...APPEAR], rule: 'sits on the fastest change of its appearance', early: 60, late: 80 },
   swell: { sounds: ['whoosh', 'swoosh'], rule: 'centers on the fastest motion', early: 150, late: 150 },
   build: { sounds: ['riser', 'reverse', 'drone'], rule: 'crests inside the reveal it builds to', early: 150, late: 150 },
   stroke: { sounds: ['draw', 'zip', 'drag', 'ticker', 'spin', 'flick'], rule: 'starts with its motion', early: 60, late: 110 },
@@ -155,6 +163,7 @@ function motionAround(m, fps, t, floor, reach = 0.6) {
 
 export async function auditVideo(cueLog) {
   const { video, width, height, fps, cues, cuts = [] } = cueLog;
+  analysisSize(width, height);
   const [samples, frames] = await Promise.all([decode(video), grayFrames(video)]);
   // Under narration, speech dominates the mix: effects are judged on their own stem (as mixed: ducked, in their
   // room), and each one is also checked for how far the speech buries it.
@@ -191,7 +200,8 @@ export async function auditVideo(cueLog) {
     const mv = motionAround(local, fps, event, floor);
     if (mv.peak < floor) return { mv, region, deltaMs: null, fail: `no visible motion in its element's box within 0.6 s (peak change ${mv.peak.toFixed(2)} under floor ${floor.toFixed(2)})` };
     // Contact and appear sounds must fall inside their motion segment. Swells center on its peak. Strokes start with it.
-    const delta = cls === 'swell' ? (event - mv.peakAt) * 1000 : cls === 'stroke' ? (event - mv.start) * 1000 : event < mv.start ? (event - mv.start) * 1000 : event > mv.settle ? (event - mv.settle) * 1000 : 0;
+    // An appearance is taken in at its fastest change, so its sound is judged against that frame, not the whole motion.
+    const delta = cls === 'swell' || cls === 'appear' ? (event - mv.peakAt) * 1000 : cls === 'stroke' ? (event - mv.start) * 1000 : event < mv.start ? (event - mv.start) * 1000 : event > mv.settle ? (event - mv.settle) * 1000 : 0;
     const tol = CLASS[cls];
     const fail = delta < -tol.early ? `${Math.round(-delta)} ms early: it ${tol.rule}` : delta > tol.late ? `${Math.round(delta)} ms late: it ${tol.rule}` : null;
     return { mv, region, deltaMs: Math.round(delta), fail };
