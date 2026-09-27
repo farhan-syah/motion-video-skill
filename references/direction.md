@@ -134,9 +134,9 @@ Add cue times: each sub-action starts on a beat, 2–4 beats apart.
   - **Caption track:** one narration line per beat along the bottom, the key word in the accent.
   - **Statements:** big centered lines that change size and place with each beat's composition.
   - **Chapter headlines:** a parallel two-line pattern in a fixed `.hud` slot, with a label such as "03 · DIRECT", each marked `data-headline`. For a chaptered explainer, not the default.
-- **Under narration:** the voice carries the sentences. The screen shows what the ear cannot hold: the key word, number, name, place, or a word-synced caption track. Never a second copy of the script.
+- **Under narration:** the voice carries the sentences. The screen shows what the ear cannot hold: the key word, number, name, place, or a word-synced caption track. Never a second copy of the script beyond a caption track.
 - **Headlines:** at most 6 words, one idea.
-- **Captions:** one per feature, on a card at the top or bottom, never over the action.
+- **Feature cards:** one per feature, at the top or bottom, never over the action.
 - **Reading time:** every line holds for at least words ÷ 3 seconds.
 - **UI copy:** real names, amounts, dates. Never "Lorem ipsum" or "Feature 1".
 

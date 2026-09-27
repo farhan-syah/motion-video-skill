@@ -11,7 +11,7 @@ OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description
 2. **The narration:** the whole script is one generation, one take, cloning that reference. Each generation is a separate draw of the voice, so one take keeps it the same person from start to end. A line with its own delivery note is its own short generation, a timed script keeps each line apart, and a script over 700 words splits at a sentence end. One generation can run to about 11 minutes of audio.
 3. **The shape:** the script's words are found in the take. Each sentence gets its own span, and the silence at each blank line and `[pause]` mark is set to its length.
 4. **The check:** the take is heard back as a whole. A failing take regenerates under a new seed, up to 3 tries, and the best is kept. A take that fails every try is spoken again by beats, then by sentences.
-5. **The polish** (`narration.md`, Voice polish) evens its loudness, compresses it gently and de-esses it. Its pace is set in the take, from `--style` or a delivery note. A time stretch turns its faint crackle in an "s" into audible static.
+5. **The polish** (`narration.md`, Voice polish) evens its loudness, compresses it gently, de-esses it and normalizes it to a -1 dB peak. Its pace is set in the take, from `--style` or a delivery note. A time stretch turns its faint crackle in an "s" into audible static.
 
 ## The voice
 
@@ -19,7 +19,7 @@ OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description
 
   | Narration          | Example `--voice` (a range, never a menu)                                                                               |
   | ------------------ | ----------------------------------------------------------------------------------------------------------------------- |
-  | Lesson or tutorial | `"(A man in his thirties with a deep, warm voice. Calm and unhurried, explaining something to one person he knows.)"`   |
+  | Lesson or tutorial | `"(A man in his thirties with a deep, warm voice. Calm and patient, explaining something to one person he knows.)"`     |
   | Product launch     | `"(A woman in her late twenties with a bright, clear voice. Upbeat and confident, presenting a new product on stage.)"` |
   | Documentary        | `"(An older man with a low, textured voice. Measured and thoughtful, narrating a nature documentary.)"`                 |
   | Children's story   | `"(A young woman with a soft, gentle voice. Playful and warm, reading a bedtime story to a child.)"`                    |
@@ -27,22 +27,27 @@ OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description
 - **Always design one.** Without `--voice` or `--reference`, the model picks its own voice.
 - **Listen to `<out>.voice.wav` first** for the voice itself: its timbre, age and accent. If it is wrong, change `--voice` or `--seed`. A new seed designs a new voice. It is the clip cloned from, not the finished sound: VoxCPM2 takes its timbre and pace and generates the audio fresh, so a crackle in its "s" can be absent from the takes. Judge sound quality in the takes.
 - **Clone** with `--reference voice.wav`: 5 to 30 s of clean speech, only the user's own voice, or a voice they have consent to use. Cloning is the sure way to a specific accent: a described voice drifts toward the model's most common accent.
-- **Hi-Fi cloning (`--hifi`):** clones from the reference and its exact transcript, which holds the voice closer to it. A designed voice keeps the words it was designed on, and a user's recording is transcribed with Whisper. VoxCPM2 ignores `--style` in this mode; a line's own delivery note still applies to that line.
-- **One voice holds:** every `speak` call with the same `--voice`, `--seed` and `--language` clones the same reference, so per-scene files match. `--reference <out>.voice.wav` gives another video the same voice.
+- **Hi-Fi cloning (`--hifi`):** clones from the reference and its exact transcript, which holds the voice closer to it. A designed voice keeps the words it was designed on, and a user's recording is transcribed with Whisper. VoxCPM2 ignores `--style` in this mode. A line's own delivery note still applies to that line.
+- **One voice holds:** every `speak` call with the same `--voice`, `--seed` and `--language` clones the same reference, so per-scene files match. `--reference <out>.voice.wav` gives another video the same voice. It is already prepared, so `speak` uses it as it is.
 
 ## Delivery
 
 - **Write an instruction as sound:** tone, emotion and pace, the way VoxCPM2's guide does: `(slightly faster, cheerful tone)`, `(speaking very fast, bright and full)`. Describe how the voice behaves, never what the line means: `(curious tone, rising intonation)`, not `(asking a question)`.
 - **`--style "(calm, warm tone, slow pace)"`** steers every generation. It changes emotion, pace and delivery, never the voice.
-- **The reference sets the pace:** a clone speaks near its reference's pace. Measured on one voice, with the same style and no pace words, a reference at 4.3 syllables per second (pauses included) gave clones at 5.0, and a reference spoken slowly, at 3.8, gave 3.9. A clone also takes the reference's manner: an emphatic reference, with a harsh "s", gives emphatic clones. So a designed voice speaks its opening again from itself, calm and natural at a slow pace, and that becomes the reference (once more, very slowly, if it is still faster than 3.9). Without "natural", the re-spoken reference sounded angry. The design as first spoken stays in the cache as `voice-<key>.design.wav`. A breathy reference, with breath between its words, gives clones a stray "hh" through their words. So the breaths in a reference's pauses are turned down by 20 dB, the speech untouched. Then the reference is compressed gently (threshold -22 dB, ratio 1.5, a 30 dB soft knee, 2 ms attack, 450 ms release, +3.6 dB make-up), which evens its syllables, and normalized: its DC offset removed and its peak set to -1 dB. A designed voice's reference is changed in place, and a user's recording through a copy in the cache (the recording itself is never changed). Record a voice to clone calm and natural, at the pace the narration wants.
-- **Pace is set in the take:** `speak` never time-stretches VoxCPM2. Pace words move it less than the reference does. Measured on one voice and excerpt (syllables per second while speaking):
+- **The reference sets the clone:** a clone takes its pace, manner and tone from the reference, far more than from any note. So `speak` prepares every reference before cloning. A designed voice's reference is changed in place. A user's recording is cloned from a prepared copy in the cache, and the recording itself is never changed. Record a voice to clone calm and natural, at the pace the narration wants.
+  - **Pace and manner:** a designed voice speaks its opening again from itself, "(calm, natural tone, speaking slowly)", and that becomes the reference. If it is still faster than 3.9 syllables per second (pauses included), it speaks once more, very slowly. Measured on one voice, with the same style and no pace words, a reference at 4.3 gave clones at 5.0, and a reference spoken slowly, at 3.8, gave 3.9. An emphatic reference, with a harsh "s", gives emphatic clones. Without "natural", the re-spoken reference sounded angry. The design as first spoken stays in the cache as `voice-<key>.design.wav`.
+  - **Breaths:** a breathy reference, with breath between its words, gives clones a stray "hh" through their words. The breaths in its pauses are turned down by 20 dB, the speech untouched.
+  - **Bass:** a thin reference gives a thin voice, hard on the ear. A reference whose 120-250 Hz band sits under its 1-2 kHz band gets a low shelf at 250 Hz, up to +9 dB, until they are level. A reference with enough bass is left as it is.
+  - **Compression:** threshold -22 dB, ratio 1.5, a 30 dB soft knee, 2 ms attack, 450 ms release, +3.6 dB make-up. It evens the syllables.
+  - **Normalizing:** the DC offset removed and the peak set to -1 dB.
+- **Pace is set in the take:** `speak` never time-stretches VoxCPM2, and ignores `--speed` for it. Pace words move it less than the reference does. Measured on one voice and excerpt (syllables per second while speaking):
 
-  | Pace words        | Pace |
-  | ----------------- | ---- |
-  | none              | 5.0  |
-  | "unhurried pace"  | 5.1  |
-  | "slow pace"       | 4.3  |
-  | "speaking slowly" | 4.2  |
+  | Pace words        | Pace            |
+  | ----------------- | --------------- |
+  | none              | 5.0             |
+  | "unhurried pace"  | 5.1 (no change) |
+  | "slow pace"       | 4.3             |
+  | "speaking slowly" | 4.2             |
 
   A delivery note replaces `--style`, so a pace in `--style` never reaches a noted line: write it into each note too.
 
@@ -96,10 +101,10 @@ OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description
 
 ## Takes and settings
 
-- **Takes are cached** by voice, delivery, text and seed (`~/.cache/motion-video/speak/voxcpm`). A re-run speaks only changed beats.
+- **Takes are cached** by voice, delivery, text and seed (`~/.cache/motion-video/speak/voxcpm`). A re-run speaks only changed parts. The whole script is one part, so changing any line without a delivery note speaks the whole take again.
 - **`<out>.takes.json`** records each chosen take and the voice's seed. A later run without `--seed` keeps both. A different `--seed` starts over. Keep the file beside the audio: moving the old audio aside keeps its takes only when this file stays.
-- **A part's first seed comes from its text,** so adding or splitting a line leaves every other part's take as it was.
-- **`--reroll 3,5`** draws new takes for those beats. The earlier take stays in the running, so a worse draw never replaces it.
+- **A part's first seed comes from its text,** so adding or splitting a line leaves every other part's take as it was. The parts are the take, each line with a delivery note, and each split of a script over 700 words.
+- **`--reroll 3,5`** draws new takes for those parts (the numbers in `speak`'s `ok ?` lines). A fresh take that passes as well as the earlier one replaces it. A worse one never does.
 - **`--cfg 1.6 --steps 16`** by default. Guidance 1.0–2.0 is relaxed and natural, and above 2.0 follows the text more strictly with more noise. More steps (up to 30) are more natural and slower.
 - **Checkpoint:** loads offline from `"tts": { "checkpoint": "/path" }`, the model folder, or the Hugging Face cache. `doctor` names the one it finds.
 - **Out of GPU memory:** `speak` says how much is free. Another process holds the rest (`nvidia-smi` lists it).

@@ -31,7 +31,7 @@ Commands:
                                  --land replaces the outlines with precise polygons, --layer draws lines and areas.
                                  Default size: the manifest's. --countries lists every country name.
   speak TEXT|FILE [--engine kokoro|voxcpm] [--voice V] [--style S] [--reference WAV] [--speed S] [--pace P] [--seed N]
-        [--reroll 3,7] [--cfg 1.6] [--steps 16] [--hifi] [--written FILE] [--review] [--raw]
+        [--reroll 3,7] [--cfg 1.6] [--steps 16] [--hifi] [--written FILE] [--review] [--raw] [--device cpu]
         [--language L]
         [--model HF_ID | --command "TEMPLATE" [--one-call]] [--out WAV]
                                  Narration from a script. Writes the WAV and its script next to it (default
@@ -43,8 +43,10 @@ Commands:
                                  The default is the best engine here: VoxCPM2 with its GPU, else Kokoro.
                                  "tts" in ~/.config/motion-video/config.json sets defaults. Every take is heard
                                  back with Whisper (--language sets its language). VoxCPM2 designs the voice once
-                                 (<out>.voice.wav), speaks one beat per generation in the --style delivery, and
-                                 regenerates a failing beat under a new seed. It exits 1 when a problem remains.
+                                 (<out>.voice.wav) and speaks the whole script as one take in the --style delivery
+                                 (a line with a delivery note is its own take). A failing take is regenerated under
+                                 a new seed, then spoken again by beats, then by sentences. It exits 1 when a
+                                 problem remains, 2 on a bad input.
   transcribe [FILE ...] [--model M] [--language L] [--script TXT]
                                  Word-level timestamps for narration, from a local Whisper model. With no FILE: the
                                  manifest's voiceover and every scene audio. Writes out/voice/<name>.words.json and
@@ -74,7 +76,7 @@ Commands:
 Options:
   --manifest PATH                Manifest path. Default: ./video.json
   --scene NAME                   One scene: its name, the number its file name starts with (2 for 02-engines), or its
-                                 1-based place when names carry no number. Other scene files may be missing.
+                                 1-based place when names carry no number. Other scene files can be missing.
 `;
 
 function num(flag, v, min) {
@@ -152,7 +154,7 @@ function report(findings) {
 async function init(dir) {
   if (!dir) throw new ManifestError('init needs a target directory.');
   const target = resolve(dir);
-  // Projects hold renders and scratch files. Inside the skill folder they would pollute its source and its git repo.
+  // Projects hold renders and scratch files. Inside the skill folder they pollute its source and its git repo.
   const skillDir = fileURLToPath(new URL('..', import.meta.url)).replace(/\/scripts\/?$/, '');
   const rel = relative(skillDir, target);
   if (rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))) {
@@ -322,7 +324,7 @@ async function speakCmd(opts) {
     console.log('');
   }
   if (opts.review) return 0;
-  if (engineFor === 'voxcpm' && (opts.speed ?? tts.speed ?? 1) !== 1) console.error('speak --speed: VoxCPM2 is time-stretched after it speaks, which turns its faint crackle in an "s" into audible static. Set the pace in --style and every delivery note ("slow pace", "speaking slowly") instead, and drop --speed.');
+  if (engineFor === 'voxcpm' && (opts.speed ?? tts.speed ?? 1) !== 1) console.error('speak --speed: VoxCPM2 is never time-stretched, so --speed and "tts.speed" are ignored for it. Set the pace in --style and every delivery note ("slow pace", "speaking slowly").');
   // --written: the same words with grammar's punctuation, for captions. Checked before any audio is made.
   let written = null;
   if (opts.written) {
@@ -330,7 +332,11 @@ async function speakCmd(opts) {
     const { writtenScript } = await import('./lib/speak.mjs');
     const wraw = readFileSync(opts.written, 'utf8').trim();
     const wcues = parseTimedScript(wraw);
-    written = writtenScript(script, wcues ? wcues.map((c) => c.text).join('\n') : wraw);
+    try {
+      written = writtenScript(script, wcues ? wcues.map((c) => c.text).join('\n') : wraw);
+    } catch (e) {
+      throw new ManifestError(e.message);
+    }
   }
   const out = resolve(opts.out ?? 'assets/voiceover.wav');
   mkdirSync(dirname(out), { recursive: true });
@@ -345,24 +351,25 @@ async function speakCmd(opts) {
   const { pace } = await import('./lib/speak.mjs');
   const { config } = await import('./lib/paths.mjs');
   const target = opts.pace ?? config().tts?.pace ?? 4.1;
-  // The voice layer's own processing: pace and loudness evened sentence by sentence, then de-essing. A user's own
-  // recording never passes through here. --raw leaves the generated voice as it came.
+  // The voice layer's own processing: loudness evened sentence by sentence, gentle compression, de-essing, then a -1 dB
+  // peak. It never changes the pace. A user's own recording never passes through here. --raw leaves the generated
+  // voice as it came.
   let phrases = made;
   if (!opts.raw) {
     const { polish } = await import('./lib/speak.mjs');
     const done = polish(out, phrases ?? []);
     if (phrases) phrases = done.phrases;
     const s = done.stats;
-    console.log(`Voice polish: loudness evened in ${s.leveled} sentence(s)${s.leveled ? ` (up to ${s.maxGain.toFixed(1)} dB)` : ''}, compressed gently, harsh "s" turned down in ${(s.essShare * 100).toFixed(1)}% of the audio${s.essShare ? ` (up to ${(-s.essDeepest).toFixed(1)} dB)` : ''}. --raw skips this.`);
+    console.log(`Voice polish: loudness evened in ${s.leveled} sentence(s)${s.leveled ? ` (up to ${s.maxGain.toFixed(1)} dB)` : ''}, compressed gently, harsh "s" turned down in ${(s.essShare * 100).toFixed(1)}% of the audio${s.essShare ? ` (up to ${(-s.essDeepest).toFixed(1)} dB)` : ''}, normalized to a -1 dB peak. --raw skips this.`);
   }
   // The verdict judges the value as printed, so a pace on the range's edge never reads as outside it.
   const rate = phrases ? Math.round(pace(phrases, out) * 10) / 10 : null;
   // The suggestion aims at the target and scales the speed this take was made with.
-  const at = opts.speed ?? 1;
+  const at = opts.speed ?? config().tts?.speed ?? 1;
   const aim = Math.round(Math.min(1.5, Math.max(0.6, (at * target) / rate)) * 100) / 100;
   const lo = +(target - 0.6).toFixed(1);
   const hi = +(target + 0.6).toFixed(1);
-  // VoxCPM2 sets its pace in the take, from the delivery note. A time stretch would turn its faint crackle into static.
+  // VoxCPM2 sets its pace in the take, from --style and delivery notes. A time stretch turns its faint crackle into static.
   const fix = (slower) => (/^VoxCPM2/.test(engine) ? `Ask for a ${slower ? 'slower' : 'quicker'} pace in --style and in every delivery note, which replaces --style for its line ("${slower ? 'slow pace' : 'slightly faster'}"), then speak again.` : `--speed ${aim} reaches ${target}.`);
   if (rate) console.log(`Pace: ${rate.toFixed(1)} syllables per second while speaking${rate > hi ? `: faster than the ${lo} to ${hi} range. ${fix(true)}` : rate < lo ? `: slower than the ${lo} to ${hi} range. ${fix(false)}` : `: in the ${lo} to ${hi} range around ${target}.`}`);
   if (cues) {
@@ -388,7 +395,7 @@ or "audio": "${rel(out)}" and "script": "${rel(txt)}" on the one scene it narrat
   // Every phrase as it was heard back, so a wrong word shows even when the check passes it.
   console.log('\nHeard back, phrase by phrase:');
   const { HEATED } = await import('./lib/speak.mjs');
-  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length || c.heat > HEATED || c.pauses?.length || c.clicks?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.heat > HEATED ? `\n        ${c.hotText ? `"${c.hotText.slice(0, 60)}": ` : ''}its pitch peaks at ${c.heat}x the voice's usual pitch: it may sound shouted or excited. Listen, then calm its delivery note or --reroll it` : ''}${(c.pauses ?? []).map((p) => `\n        a ${p.gap}s pause between "${p.after}" and "${p.before}", where the script has no break: the voice may have misread the grammar. Add a comma where the break belongs, or reword`).join('')}${c.clicks?.length ? `\n        a click the repair could not smooth, ${c.clicks.map((v) => `${v}s`).join(', ')} into this part: listen to it, and --reroll this phrase if it is heard` : ''}${c.doubt?.length ? `\n        both recognizers missed or misheard ${c.doubt.map((w) => `"${w}"`).join(', ')}: listen to it, and ${/^VoxCPM2/.test(engine) ? '--reroll this phrase' : 'reword the phrase'} if it is said wrong` : ''}`);
+  checks.forEach((c, part) => console.log(`  ${c.ok ? (c.doubt?.length || c.heat > HEATED || c.pauses?.length || c.clicks?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.heat > HEATED ? `\n        ${c.hotText ? `"${c.hotText.slice(0, 60)}": ` : ''}its pitch peaks at ${c.heat}x the voice's usual pitch: it can sound shouted or excited. Listen, then calm its delivery note or --reroll ${part + 1}` : ''}${(c.pauses ?? []).map((p) => `\n        a ${p.gap}s pause between "${p.after}" and "${p.before}", where the script has no break: the voice misread the grammar. Add a comma where the break belongs, or reword`).join('')}${c.clicks?.length ? `\n        a click the repair could not smooth, ${c.clicks.map((v) => `${v}s`).join(', ')} into this part: listen to it, and --reroll ${part + 1} if it is heard` : ''}${c.doubt?.length ? `\n        both recognizers missed or misheard ${c.doubt.map((w) => `"${w}"`).join(', ')}: listen to it, and ${/^VoxCPM2/.test(engine) ? `--reroll ${part + 1}` : 'reword the phrase'} if it is said wrong` : ''}`));
   if (problems.length) {
     console.log(`\nThe speech check found ${problems.length} problem(s), heard back with Whisper:`);
     for (const p of problems) console.log(`  ${p}`);
@@ -957,7 +964,7 @@ async function probe(m, scenes, selector, t) {
   });
 }
 
-// Music may be analyzed before any manifest exists, so this reads the manifest only for defaults.
+// Music can be analyzed before any manifest exists, so this reads the manifest only for defaults.
 async function beats(opts) {
   const { analyzeBeats } = await import('./lib/beats.mjs');
   let file = opts.rest[0] ? resolve(opts.rest[0]) : null;

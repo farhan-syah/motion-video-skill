@@ -36,7 +36,7 @@ With no engine flag or config, `speak` picks the best engine this machine runs: 
 
 A script feature an engine lacks is dropped for it, never spoken: delivery notes and tags are VoxCPM2 only.
 
-Every engine's output gets the voice polish: loudness evened sentence by sentence, gentle compression, and de-essing (`narration.md`, Voice polish). The user's own recordings are never processed.
+Every engine's output gets the voice polish: loudness evened sentence by sentence, gentle compression, de-essing, and normalizing to a -1 dB peak (`narration.md`, Voice polish). It never changes the pace. The user's own recordings are never changed.
 
 ## Steps for any engine
 
@@ -52,12 +52,12 @@ Every engine's output gets the voice polish: loudness evened sentence by sentenc
 
 Set once in `~/.config/motion-video/config.json`. Flags override it.
 
-| Goal                 | Config                                              |
-| -------------------- | --------------------------------------------------- |
-| One engine and voice | `{ "tts": { "engine": "voxcpm", "voice": "(…)" } }` |
-| A Hugging Face model | `{ "tts": { "model": "<model id>" } }`              |
-| The user's TTS       | `{ "tts": { "command": "…" } }`                     |
-| Speed and pace       | `{ "tts": { "speed": 0.9, "pace": 4.3 } }`          |
+| Goal                 | Config                                                          |
+| -------------------- | --------------------------------------------------------------- |
+| One engine and voice | `{ "tts": { "engine": "voxcpm", "voice": "(…)" } }`             |
+| A Hugging Face model | `{ "tts": { "model": "<model id>" } }`                          |
+| The user's TTS       | `{ "tts": { "command": "…" } }`                                 |
+| Speed and pace       | `{ "tts": { "speed": 0.9, "pace": 4.3 } }` (speed: not VoxCPM2) |
 
 ## Speech check across languages
 

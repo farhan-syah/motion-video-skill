@@ -86,7 +86,7 @@ export function phrases(script) {
   beats.forEach((beat, bi) => {
     const lines = beat.split('\n');
     lines.forEach((raw, li) => {
-      // A delivery note opens a line: "(asking a question) Want your own voice?". VoxCPM2 speaks by it, and it is never
+      // A delivery note opens a line: "(curious tone, rising intonation) Where does the water go?". VoxCPM2 speaks by it, and it is never
       // spoken, shown in captions or checked.
       const lead = LEAD.exec(raw);
       if (lead) delivery = `(${lead[1].trim()})`;
@@ -159,7 +159,7 @@ const LEAD = /^[ \t]*\(([^()\n]{2,120})\)[ \t]*/;
 // and checks read.
 const clean = (script) => withoutTags(script.replace(new RegExp(LEAD.source, 'gm'), '').replace(/\[pause(?:\s+[\d.]+)?\]/gi, ' ')).replace(/\s+/g, ' ').trim();
 
-// A word written one way and said another: {VoxCPM2|Vox C P M two}, {--command|dash dash command}. Captions and the
+// A word written one way and said another: {SQL|sequel}, {km/h|kilometres per hour}. Captions and the
 // screen show the written form. The voice says the spoken form, and the speech check listens for it.
 const SAID = /\{([^{}|\n]+)\|([^{}\n]+)\}/g;
 export const say = (text) => text.replace(SAID, '$2');
@@ -550,7 +550,7 @@ export function review(script, { language, notes = false } = {}) {
 }
 
 // Pauses the script does not ask for: a silence over 0.45 s between two words with no punctuation between them. A
-// voice phrases by how it reads the grammar, so a word that can be a noun or a verb ("recognition times each word")
+// voice phrases by how it reads the grammar, so a word that can be a noun or a verb ("the support team calls each customer")
 // can pull the pause to the wrong place. Every word is still said, so the word check passes it.
 export const STRAY_PAUSE = 0.45;
 export function strayPauses(heard, text, alignScript) {
@@ -599,9 +599,10 @@ async function heardCheck(file, text, language) {
 // several GB). The model loads from a checkpoint already on disk, offline, and downloads into the model folder only
 // when none exists.
 // The voice comes first: a recording to clone (--reference), or a reference designed once from --voice by speaking
-// the script's opening (about 10 s), saved beside the audio to listen to. Then each beat (chunks) is one generation
-// that clones it, transcribed back and checked. A failed take is regenerated with another seed, up to 3 tries, and the
-// best take is kept. A beat that fails every take is spoken sentence by sentence instead.
+// the script's opening (25 words or more), spoken again calm and slow, and prepared (prepareReference). A recording is
+// cloned from a prepared copy. The whole script is then one generation that clones it, except noted lines and splits
+// over 700 words. Each take is repaired, transcribed back and checked. A failed take is regenerated with another seed,
+// up to 3 tries, and the best is kept. A take that fails every try is spoken again by beats, then by sentences.
 async function voxcpm(script, { voice = '', reference = '', style = '', hifi = false, cfg = 1.6, steps = 16, device, seed: asked, configSeed, language, reroll = [], lines = false }, out) {
   const ready = voxcpmReady();
   if (!ready.ok && !device) throw new Error(`speak --engine voxcpm ${ready.why}. Use the default Kokoro engine, another TTS with --command, or --device cpu (very slow).`);
@@ -614,7 +615,7 @@ async function voxcpm(script, { voice = '', reference = '', style = '', hifi = f
   const short = units.map((u, i) => ({ t: u.text, i })).filter((p) => p.t.split(/\s+/).length < 3);
   if (short.length) console.error(`speak: short parts fail more often with VoxCPM2: ${short.map((p) => `${p.i + 1} "${p.t}"`).join(', ')}. When one fails, join it to the line before or after.`);
   // The take chosen for each part is recorded beside the audio with the seed that made the voice, so a later run (a
-  // new speed, one reworded line) keeps both, re-rolled takes included. Only a --seed other than the recorded one
+  // new pace target, one reworded line) keeps both, re-rolled takes included. Only a --seed other than the recorded one
   // starts over.
   const record = out.replace(/\.[^./]+$/, '') + '.takes.json';
   let saved = {};
@@ -639,8 +640,14 @@ async function voxcpm(script, { voice = '', reference = '', style = '', hifi = f
   const anchorFile = anchorKey ? join(cache, `voice-${anchorKey}.wav`) : null;
   // A user's recording is cloned from a prepared copy (prepareReference), kept in the cache. The recording itself is
   // never changed.
-  const cloneFrom = reference ? join(cache, `ref-${hash('breaths', 'compressed', 'normalized')}.wav`) : null;
-  if (cloneFrom && !existsSync(cloneFrom)) writeFileSync(cloneFrom, wav([prepareReference(samples(reference))], 48000).buf);
+  const cloneFrom = reference ? join(cache, `ref-${hash('breaths', 'bass', 'compressed', 'normalized')}.wav`) : null;
+  // A reference speak prepared itself (a designed voice's <out>.voice.wav passed back) is used as it is, so its
+  // compression does not double. Each prepared reference leaves its content hash in the cache.
+  const prepared = (file) => join(cache, 'prepared', createHash('sha1').update(readFileSync(file)).digest('hex'));
+  if (cloneFrom && !existsSync(cloneFrom)) {
+    if (existsSync(prepared(reference))) copyFileSync(reference, cloneFrom);
+    else writeFileSync(cloneFrom, wav([prepareReference(samples(reference))], 48000).buf);
+  }
   // Takes made at the runner's own settings (cfg 2, 10 steps) keep their older keys.
   const takeFile = (s) => join(cache, `${hash(anchorKey, s.style ?? style, s.text, s.seed, ...(cfg !== 2 || steps !== 10 ? [cfg, steps] : []), ...(hifi ? ['hifi'] : []))}.wav`);
   // The designed voice speaks the script's opening, 25 words or more: a clip long enough for every part to hold it.
@@ -693,7 +700,7 @@ async function voxcpm(script, { voice = '', reference = '', style = '', hifi = f
     const design = (designSeed) => {
       console.error(`speak: designing the voice from --voice${designSeed !== seed ? ` (seed ${designSeed})` : ''}, speaking the script's opening: "${opening.join(' ')}"`);
       generate([{ index: 0, text: say(opening.join(' ')), seed: designSeed }], true);
-      // The reference is repaired like a take: a glitch in it would carry into every part cloned from it.
+      // The reference is repaired like a take: a glitch in it carries into every part cloned from it.
       writeFileSync(anchorFile, wav([repairClicks(tidy(samples(join(dir, 'anchor.wav'))).samples).samples], 48000).buf);
       // The words the reference says, for Hi-Fi cloning, which needs its exact transcript.
       writeFileSync(anchorFile.replace(/\.wav$/, '.txt'), say(opening.join(' ')));
@@ -721,6 +728,8 @@ async function voxcpm(script, { voice = '', reference = '', style = '', hifi = f
       const x = samples(anchorFile);
       const runs = quietBreaths(x).runs;
       writeFileSync(anchorFile, wav([prepareReference(x)], 48000).buf);
+      mkdirSync(join(cache, 'prepared'), { recursive: true });
+      writeFileSync(prepared(anchorFile), '');
       if (runs) console.error(`speak: turned down ${runs} breath(s) in the designed voice's reference.`);
       if (hifi) hifiText = say(opening.join(' '));
     }
@@ -1018,6 +1027,7 @@ function speechLevel(x, start, end, rate = 48000) {
 // - compression (compressVoice): evens loud and soft syllables, the same settings as a reference's. Before
 //   de-essing, since it lifts the soft parts, an "s" among them.
 // - de-essing (deEss).
+// - normalizing (normalizePeak): the whole voice centered, its peak at -1 dB.
 // Rewrites the file and returns the moved sentence spans and what was done.
 export function polish(file, phrases) {
   const rate = 48000;
@@ -1046,15 +1056,10 @@ export function polish(file, phrases) {
   x = compressVoice(x, rate);
   const ess = {};
   x = deEss(x, rate, ess);
+  // Last, the whole voice is centered with its peak at -1 dB, so a long take ends balanced and steady.
+  x = normalizePeak(x, -1);
   writeFileSync(file, wav([x], rate).buf);
   return { phrases: spans, stats: { ...stats, essShare: ess.share ?? 0, essDeepest: ess.deepest ?? 0 } };
-}
-
-// De-esses a generated voiceover file in place.
-export function deEssFile(file) {
-  const stats = {};
-  writeFileSync(file, wav([deEss(samples(file), 48000, stats)], 48000).buf);
-  return stats;
 }
 
 // Pitch in Hz of each voiced 40 ms frame of 48 kHz audio, by autocorrelation at 16 kHz (60-400 Hz).
@@ -1106,7 +1111,6 @@ export const medianPitch = (x) => percentile(pitches(x), 0.5);
 // letters ("ber-lum-pur" is 3).
 const syllables = (text) => (text.toLowerCase().normalize('NFKD').match(/[aeiouy]+/g) ?? []).length;
 
-// Speaking pace: syllables per second while speaking (pauses left out). Explainers read best around 4-5.
 // With the audio file, each span counts only from its first sound to its last: the silence at a phrase's edges does
 // not scale with the speed, so counting it made the suggested --speed overshoot.
 // Breath in a voice: runs of 80 ms or more that are quiet (20 to 45 dB under its loud level) and unpitched, the
@@ -1165,7 +1169,7 @@ export function quietBreaths(x, rate = 48000) {
   return { samples: y, runs: runs.length };
 }
 
-// A gentle vocal compressor for a reference: threshold -22 dB, ratio 1.5, a 30 dB soft knee, 2 ms attack, 450 ms
+// A gentle vocal compressor for a reference and for the polished voice: threshold -22 dB, ratio 1.5, a 30 dB soft knee, 2 ms attack, 450 ms
 // release, +3.6 dB make-up. It evens the reference's loud and soft syllables, and heard by ear it improved a reference
 // markedly. Feed-forward, with the soft-knee gain curve (Giannoulis, Massberg and Reiss) smoothed per sample.
 export function compressVoice(x, rate = 48000, { threshold = -22, ratio = 1.5, knee = 30, attack = 0.002, release = 0.45, makeup = 3.6 } = {}) {
@@ -1198,12 +1202,69 @@ export function normalizePeak(x, peakDb = -1) {
   return Float32Array.from(x, (v) => (v - mean) * g);
 }
 
-// A reference as VoxCPM2 clones from it: breaths in its pauses turned down, gently compressed, then centered with its
-// peak at -1 dB. Heard by ear, compression improved a reference markedly and the normalizing held it steadier still.
-export const prepareReference = (x) => normalizePeak(compressVoice(quietBreaths(x).samples));
+// A second-order filter (the RBJ audio EQ cookbook): 'highpass', 'lowpass' or 'lowshelf' at f Hz.
+function biquad(x, type, f, { q = Math.SQRT1_2, gainDb = 0, rate = 48000 } = {}) {
+  const w = (2 * Math.PI * f) / rate;
+  const cos = Math.cos(w);
+  const alpha = Math.sin(w) / (2 * q);
+  let b;
+  let a;
+  if (type === 'lowshelf') {
+    const A = 10 ** (gainDb / 40);
+    const r = 2 * Math.sqrt(A) * alpha;
+    b = [A * (A + 1 - (A - 1) * cos + r), 2 * A * (A - 1 - (A + 1) * cos), A * (A + 1 - (A - 1) * cos - r)];
+    a = [A + 1 + (A - 1) * cos + r, -2 * (A - 1 + (A + 1) * cos), A + 1 + (A - 1) * cos - r];
+  } else {
+    const k = type === 'highpass' ? 1 + cos : 1 - cos;
+    b = type === 'highpass' ? [k / 2, -k, k / 2] : [k / 2, k, k / 2];
+    a = [1 + alpha, -2 * cos, 1 - alpha];
+  }
+  const y = new Float32Array(x.length);
+  let [x1, x2, y1, y2] = [0, 0, 0, 0];
+  for (let n = 0; n < x.length; n++) {
+    const v = (b[0] * x[n] + b[1] * x1 + b[2] * x2 - a[1] * y1 - a[2] * y2) / a[0];
+    [x2, x1, y2, y1] = [x1, x[n], y1, v];
+    y[n] = v;
+  }
+  return y;
+}
+
+// The mean level of a band, in dB: two high-pass and two low-pass stages at its edges.
+function bandLevel(x, lo, hi) {
+  let y = x;
+  for (const [type, f] of [['highpass', lo], ['highpass', lo], ['lowpass', hi], ['lowpass', hi]]) y = biquad(y, type, f);
+  let e = 0;
+  for (const v of y) e += v * v;
+  return 10 * Math.log10(e / (y.length || 1) + 1e-12);
+}
+
+// A voice's bass against its presence: the 120-250 Hz band against 1-2 kHz, in dB. Measured on VoxCPM2 voices, full
+// ones held +1 to +9, and a thin one, heard as hard on the ear, -7.
+export const bassBalance = (x) => bandLevel(x, 120, 250) - bandLevel(x, 1000, 2000);
+
+// Lifts a thin voice's bass to level with its presence: a low shelf at 250 Hz, re-measured once, at most +9 dB. A
+// voice with bass at or above its presence is left as it is. Heard by ear, a thin reference lifted this way gave a
+// fuller clone: the clone's 120 Hz band rose from -6 to -2. Returns { samples, gain }.
+export function liftBass(x, rate = 48000) {
+  let gain = 0;
+  let y = x;
+  for (let pass = 0; pass < 2; pass++) {
+    const short = -bassBalance(y);
+    if (short <= 0.5 || gain >= 9) break;
+    const step = Math.min(9 - gain, short * 1.4);
+    y = biquad(y, 'lowshelf', 250, { gainDb: step, rate });
+    gain += step;
+  }
+  return { samples: y, gain };
+}
+
+// A reference as VoxCPM2 clones from it: breaths in its pauses turned down, a thin voice's bass lifted, gently
+// compressed, then centered with its peak at -1 dB. Heard by ear, each step improved the clones.
+export const prepareReference = (x) => normalizePeak(compressVoice(liftBass(quietBreaths(x).samples).samples));
 
 // The pace a designed reference is brought to, in syllables per second with its pauses: clones speak near it.
 export const REF_PACE = 3.9;
+// Speaking pace: syllables per second while speaking (pauses left out). A relaxed explainer sits near 4.1 (3.5 to 4.7).
 export function pace(phrases, file) {
   const audio = file ? samples(file) : null;
   const talk = phrases.reduce((t, p) => t + (audio ? sounding(audio, p.start, p.end) : p.end - p.start), 0);
@@ -1241,7 +1302,7 @@ function stretch(out, spans, speed) {
 
 // Places each line of a timed script at its time: the line's phrases, with their own pauses, start at the time
 // the script asks for, or right after the line before when that one runs past it. Rewrites the WAV at `out` and
-// returns the new phrase spans and the lines that could not start on time or overrun their slot.
+// returns the new phrase spans and the lines that cannot start on time or overrun their slot.
 function placeOnTimes(out, spoken, cues, units = (t) => phrases(t).length) {
   const rate = 48000;
   const audio = samples(out);
@@ -1289,7 +1350,7 @@ export function defaultEngine({ voice, reference, language } = {}) {
 export async function speak(script, out, opts = {}) {
   const tts = config().tts ?? {};
   if (!opts.engine && !opts.command && !opts.model && !tts.engine && !tts.command && !tts.model) opts = { ...opts, engine: defaultEngine(opts) };
-  // Only VoxCPM2 voices the non-verbal tags. Every other engine would read them out as words.
+  // Only VoxCPM2 voices the non-verbal tags. Every other engine reads them out as words.
   if ((opts.engine ?? (opts.command || opts.model ? null : tts.engine)) !== 'voxcpm' && TAGS.test(script)) {
     if (!opts.stretched && !opts.lines) console.error('speak: only VoxCPM2 voices tags like [laughing] or [sigh]. This engine speaks the script without them.');
     script = withoutTags(script);
@@ -1297,11 +1358,13 @@ export async function speak(script, out, opts = {}) {
   TAGS.lastIndex = 0;
   const speed = opts.speed ?? tts.speed ?? 1;
   if (!(speed >= 0.5 && speed <= 2)) throw new Error(`speak --speed ${speed}: use 0.5 to 2 (0.9 is 10% slower).`);
-  // Kokoro sets its own speed. Every other engine is time-stretched once its audio is joined.
+  // Kokoro sets its own speed. VoxCPM2 is never time-stretched: a stretch turns its faint crackle in an "s" into
+  // audible static, so its pace comes from the reference and the delivery notes. Every other engine is time-stretched
+  // once its audio is joined.
   // A timed script's lines are placed one by one: VoxCPM2 speaks each line apart, and the spans count that way.
   const voxcpmEngine = (opts.engine ?? (opts.command || opts.model ? null : tts.engine)) === 'voxcpm';
   const units = voxcpmEngine ? (t) => chunks(t, { lines: true }).length : (t) => phrases(t).length;
-  if (speed !== 1 && !opts.stretched) {
+  if (speed !== 1 && !opts.stretched && !voxcpmEngine) {
     const eng = opts.engine ?? (opts.command || opts.model ? null : tts.engine);
     const kokoroEngine = eng === 'kokoro' || (!eng && !(opts.command ?? (opts.model ? null : tts.command)) && /kokoro/i.test(opts.model ?? tts.model ?? KOKORO));
     if (!kokoroEngine) {

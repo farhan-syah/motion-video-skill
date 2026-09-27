@@ -14,13 +14,13 @@ const CONTRAST_BODY = 4.5; // WCAG 2.2 SC 1.4.3.
 const CONTRAST_LARGE = 3;
 const LARGE_TEXT = 48 / 1080;
 const LINEAR_MAX = 2000; // Linear easing is allowed only for ambient motion longer than this (ms).
-const CROWD = 4;
-const SMALL_GRACE = 600; // Text may pass below MIN_TEXT this long (ms) during an entrance, exit or zoom-through. // This many layers entering on the same frame reads as one flat block.
+const CROWD = 4; // This many layers entering on the same frame reads as one flat block.
+const SMALL_GRACE = 600; // Text can pass below MIN_TEXT this long (ms) during an entrance, exit or zoom-through.
 
 // Runs in the page. Returns every visible run of text with its box, effective opacity and size.
 function collectText(short) {
   const out = [];
-  // Hit testing skips pointer-events: none (a caption track, an overlay), which would make whatever lies under that
+  // Hit testing skips pointer-events: none (a caption track, an overlay), which makes whatever lies under that
   // text read as covering it. Every element takes part in hit testing while the text is measured.
   const hitAll = document.createElement('style');
   hitAll.textContent = '* { pointer-events: auto !important; }';
@@ -145,7 +145,7 @@ function collectText(short) {
     if (box.r - box.l < 1 || box.b - box.t < 1) continue;
     let covered = 0;
     let coverer = null;
-    // World text ([data-world], a 3D .viewport) is part of the scene. The fixed .hud may cover it by design.
+    // World text ([data-world], a 3D .viewport) is part of the scene. The fixed .hud can cover it by design.
     const world = !!el.closest('[data-world], .viewport');
     const hud = !!el.closest('.hud');
     let underHud = 0;
@@ -157,7 +157,7 @@ function collectText(short) {
     }
     if (opacity >= 0.5 && probe.r - probe.l >= 1 && probe.b - probe.t >= 1) {
       // 15 probes across the glyph box: a dot grid or a card over part of a label hides it, though most probes of a
-      // sparse grid would miss. Three covered probes (a fifth of the text) count as covered.
+      // sparse grid miss. Three covered probes (a fifth of the text) count as covered.
       for (const [fx, fy] of [0.1, 0.3, 0.5, 0.7, 0.9].flatMap((x) => [0.3, 0.5, 0.7].map((y) => [x, y]))) {
         const hit = coveredAt(el, probe.l + (probe.r - probe.l) * fx, probe.t + (probe.b - probe.t) * fy);
         if (hit && world && hit.closest('.hud')) underHud++;
@@ -519,8 +519,8 @@ export async function checkScene(browser, m, scene, carry = null) {
             if (s.occludedFor <= step) s.occludedAt = t;
           }
         }
-        // Dimmed context (below 0.9 opacity) may leave the safe area during camera moves.
-        // So may world text while the camera pushes in or pans: the move crops the world on purpose.
+        // Dimmed context (below 0.9 opacity) can leave the safe area during camera moves.
+        // So can world text while the camera pushes in or pans: the move crops the world on purpose.
         // World text that the camera moves at any point in the scene counts as moved, so the slow ends of an eased
         // pan are exempt too.
         s.firstBox ??= it.box;
@@ -699,6 +699,8 @@ export async function checkScene(browser, m, scene, carry = null) {
         const r = Math.max(ratio(lum(color.rgb), bg), stroke && stroke.a >= 1 ? ratio(lum(stroke.rgb), bg) : 0);
         const min = it.px >= LARGE_TEXT ? CONTRAST_LARGE : CONTRAST_BODY;
         if (r < min) add('error', t, `Contrast ${r.toFixed(2)}:1 is below ${min}:1 for "${it.text}".`, 'Darken the background behind it or change the text color token.');
+        // An outline in the fill's own tone thickens every stroke of the letters and closes their counters.
+        if (stroke && stroke.a >= 1 && ratio(lum(color.rgb), lum(stroke.rgb)) < 1.5) add('warn', t, `The outline of "${it.text}" is nearly its fill's color (${ratio(lum(color.rgb), lum(stroke.rgb)).toFixed(2)}:1), so it fills in the letters.`, 'Give the outline the opposite tone (light words on a dark edge, or dark words on a light edge), or drop it.');
       });
     }
 
@@ -708,7 +710,7 @@ export async function checkScene(browser, m, scene, carry = null) {
       add('warn', null, `${sounding.length} sound cues in one scene (${sounding.map((c) => c.sound).join(', ')}). A scene carries one primary sound and at most 3 quiet secondaries.`, 'Keep the verb moment\'s sound, cut or merge the rest, or cue a container once.');
     }
     for (const c of sounding) {
-      if (c.subs?.length > 8 && !c.accentCap) add('warn', c.at, `data-sfx "${c.sound}" on ${c.target} would sound ${c.subs.length} accents.`, 'Cap it with data-sfx-accents="3" or "4".');
+      if (c.subs?.length > 8 && !c.accentCap) add('warn', c.at, `data-sfx "${c.sound}" on ${c.target} sounds ${c.subs.length} accents.`, 'Cap it with data-sfx-accents="3" or "4".');
     }
 
     // Under narration the voice leads. An effect on top of a word competes with it and distracts: it belongs in a
@@ -723,7 +725,7 @@ export async function checkScene(browser, m, scene, carry = null) {
           // The hit (its first 120 ms) must clear the words. A ring-out that fades under the next word is fine.
           const over = words.find((w) => w.start < t + 0.12 && w.end > t);
           if (!over) continue;
-          // The next pause of 0.3 s or more after the cue, where the effect could sit.
+          // The next pause of 0.3 s or more after the cue, where the effect fits.
           let gap = null;
           for (let i = words.indexOf(over); i < words.length - 1 && gap == null; i++) if (words[i + 1].start - words[i].end >= 0.3) gap = words[i].end;
           add('warn', c.at, `data-sfx "${c.sound}" on ${c.target} plays over the narration ("${over.text}" at ${over.start.toFixed(2)}s).`, `Move its moment into a pause${gap != null ? ` (the next starts at ${gap.toFixed(2)}s)` : ''}, or drop it if the voice already carries the moment.`);
@@ -731,7 +733,7 @@ export async function checkScene(browser, m, scene, carry = null) {
       }
     }
 
-    // An opening frame with only a headline (or nothing) reads as a dead cut. The motif should be on screen by 0.4 s.
+    // An opening frame with only a headline (or nothing) reads as a dead cut. The motif is on screen by 0.4 s.
     await sc.seek(Math.min(400, dur));
     const coverage = await sc.page.evaluate(openingCoverage);
     // The end card is exempt: a small lockup on a calm frame is its job.

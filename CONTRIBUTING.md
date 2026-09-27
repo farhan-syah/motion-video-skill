@@ -39,7 +39,7 @@ A toolkit an AI agent uses to direct and render a video. The skill supplies tool
 ## Style
 
 - **Code:** plain JavaScript modules for Node 20+. Match the surrounding code. A comment says why, never what.
-- **Writing:** short sentences in the present tense. Commands and paths exactly as typed.
+- **Writing:** short sentences in the present tense, one fact per sentence. No should, may, might or could. No simply, just or easily. Commands and paths exactly as typed. Examples are generic, never from one project.
 - **Commits:** an imperative subject line that says what changed ("Place appearance sounds on their fastest change").
 
 ## Releases

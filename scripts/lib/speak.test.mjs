@@ -293,3 +293,18 @@ test('normalizing centers the wave and sets its peak to -1 dB', async () => {
   assert.ok(Math.abs(mean) < 1e-3);
   assert.ok(Math.abs(20 * Math.log10(peak) - -1) < 0.01);
 });
+
+test('a thin voice gets its bass lifted, a full one is left as it is', async () => {
+  const { liftBass, bassBalance } = await import('./speak.mjs');
+  const tone = (parts) => Float32Array.from({ length: 48000 }, (_, i) => parts.reduce((t, [f, a]) => t + a * Math.sin((2 * Math.PI * f * i) / 48000), 0));
+  // Thin: 180 Hz well under 1.4 kHz. Full: 180 Hz above it.
+  const thin = tone([[180, 0.05], [1400, 0.3]]);
+  const full = tone([[180, 0.3], [1400, 0.1]]);
+  assert.ok(bassBalance(thin) < -5);
+  const lifted = liftBass(thin);
+  assert.ok(lifted.gain > 0 && lifted.gain <= 9);
+  assert.ok(bassBalance(lifted.samples) > bassBalance(thin) + 4);
+  const kept = liftBass(full);
+  assert.equal(kept.gain, 0);
+  assert.equal(kept.samples, full);
+});
