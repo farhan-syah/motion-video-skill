@@ -637,10 +637,10 @@ async function voxcpm(script, { voice = '', reference = '', style = '', hifi = f
   // scene files included) clones the same one.
   const anchorKey = reference ? null : hash('reference', seed, language ?? '');
   const anchorFile = anchorKey ? join(cache, `voice-${anchorKey}.wav`) : null;
-  // A user's recording is cloned from a copy with its breaths turned down (quietBreaths), kept in the cache. The
-  // recording itself is never changed.
-  const cloneFrom = reference ? join(cache, `ref-${hash('breaths')}.wav`) : null;
-  if (cloneFrom && !existsSync(cloneFrom)) writeFileSync(cloneFrom, wav([quietBreaths(samples(reference)).samples], 48000).buf);
+  // A user's recording is cloned from a prepared copy (prepareReference), kept in the cache. The recording itself is
+  // never changed.
+  const cloneFrom = reference ? join(cache, `ref-${hash('breaths', 'compressed', 'normalized')}.wav`) : null;
+  if (cloneFrom && !existsSync(cloneFrom)) writeFileSync(cloneFrom, wav([prepareReference(samples(reference))], 48000).buf);
   // Takes made at the runner's own settings (cfg 2, 10 steps) keep their older keys.
   const takeFile = (s) => join(cache, `${hash(anchorKey, s.style ?? style, s.text, s.seed, ...(cfg !== 2 || steps !== 10 ? [cfg, steps] : []), ...(hifi ? ['hifi'] : []))}.wav`);
   // The designed voice speaks the script's opening, 25 words or more: a clip long enough for every part to hold it.
@@ -716,10 +716,12 @@ async function voxcpm(script, { voice = '', reference = '', style = '', hifi = f
     };
     if (anchorFile && !existsSync(anchorFile)) {
       design(seed);
-      // Its breaths are turned down, so clones do not learn a breathy manner from it.
-      const q = quietBreaths(samples(anchorFile));
-      writeFileSync(anchorFile, wav([q.samples], 48000).buf);
-      if (q.runs) console.error(`speak: turned down ${q.runs} breath(s) in the designed voice's reference.`);
+      // It is prepared (prepareReference): breaths turned down, so clones do not learn a breathy manner, then
+      // compressed and normalized.
+      const x = samples(anchorFile);
+      const runs = quietBreaths(x).runs;
+      writeFileSync(anchorFile, wav([prepareReference(x)], 48000).buf);
+      if (runs) console.error(`speak: turned down ${runs} breath(s) in the designed voice's reference.`);
       if (hifi) hifiText = say(opening.join(' '));
     }
     // The voice sits beside the audio too: listen to it before judging the rest, and pass it as --reference to give
@@ -1159,6 +1161,43 @@ export function quietBreaths(x, rate = 48000) {
   }
   return { samples: y, runs: runs.length };
 }
+
+// A gentle vocal compressor for a reference: threshold -22 dB, ratio 1.5, a 30 dB soft knee, 2 ms attack, 450 ms
+// release, +3.6 dB make-up. It evens the reference's loud and soft syllables, and heard by ear it improved a reference
+// markedly. Feed-forward, with the soft-knee gain curve (Giannoulis, Massberg and Reiss) smoothed per sample.
+export function compressVoice(x, rate = 48000, { threshold = -22, ratio = 1.5, knee = 30, attack = 0.002, release = 0.45, makeup = 3.6 } = {}) {
+  const y = new Float32Array(x.length);
+  const up = Math.exp(-1 / (attack * rate));
+  const down = Math.exp(-1 / (release * rate));
+  let smooth = 0;
+  for (let k = 0; k < x.length; k++) {
+    const level = 20 * Math.log10(Math.abs(x[k]) + 1e-9);
+    const over = level - threshold;
+    let out = level;
+    if (2 * over > knee) out = threshold + over / ratio;
+    else if (2 * Math.abs(over) <= knee) out = level + ((1 / ratio - 1) * (over + knee / 2) ** 2) / (2 * knee);
+    const cut = out - level;
+    // More reduction follows at the attack rate, less at the release rate.
+    smooth = cut < smooth ? up * smooth + (1 - up) * cut : down * smooth + (1 - down) * cut;
+    y[k] = x[k] * 10 ** ((smooth + makeup) / 20);
+  }
+  return y;
+}
+
+// Centers a wave on zero (removes its DC offset), then scales its peak to peakDb.
+export function normalizePeak(x, peakDb = -1) {
+  let mean = 0;
+  for (const v of x) mean += v;
+  mean /= x.length || 1;
+  let peak = 0;
+  for (const v of x) peak = Math.max(peak, Math.abs(v - mean));
+  const g = peak ? 10 ** (peakDb / 20) / peak : 1;
+  return Float32Array.from(x, (v) => (v - mean) * g);
+}
+
+// A reference as VoxCPM2 clones from it: breaths in its pauses turned down, gently compressed, then centered with its
+// peak at -1 dB. Heard by ear, compression improved a reference markedly and the normalizing held it steadier still.
+export const prepareReference = (x) => normalizePeak(compressVoice(quietBreaths(x).samples));
 
 // The pace a designed reference is brought to, in syllables per second with its pauses: clones speak near it.
 export const REF_PACE = 3.9;

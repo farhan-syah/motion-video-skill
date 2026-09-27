@@ -270,3 +270,26 @@ test('breath in a pause is turned down, and the voice is kept', async () => {
   assert.equal(q.samples[12000], x[12000]);
   assert.equal(q.samples[60000], x[60000]);
 });
+
+test('the reference compressor follows its soft-knee curve and never clips', async () => {
+  const { compressVoice } = await import('./speak.mjs');
+  // A steady tone at a level, compressed; its settled level in dB.
+  const settled = (db) => {
+    const x = Float32Array.from({ length: 48000 }, (_, i) => 10 ** (db / 20) * Math.sign(Math.sin((2 * Math.PI * 150 * i) / 48000)));
+    const y = compressVoice(x);
+    return 20 * Math.log10(Math.abs(y[47000]));
+  };
+  assert.ok(Math.abs(settled(-36) - -32.4) < 0.2);
+  assert.ok(Math.abs(settled(-12) - -11.9) < 0.2);
+  assert.ok(Math.abs(settled(0) - -3.7) < 0.2);
+});
+
+test('normalizing centers the wave and sets its peak to -1 dB', async () => {
+  const { normalizePeak } = await import('./speak.mjs');
+  const x = Float32Array.from({ length: 4800 }, (_, i) => 0.1 + 0.3 * Math.sin((2 * Math.PI * 150 * i) / 48000));
+  const y = normalizePeak(x);
+  const mean = y.reduce((t, v) => t + v, 0) / y.length;
+  const peak = Math.max(...Array.from(y, Math.abs));
+  assert.ok(Math.abs(mean) < 1e-3);
+  assert.ok(Math.abs(20 * Math.log10(peak) - -1) < 0.01);
+});

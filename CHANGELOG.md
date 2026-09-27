@@ -15,7 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Changed
 
-- Before VoxCPM2 clones a reference, the breaths in its pauses are turned down by 20 dB. Clones no longer take on a breathy manner. A user's recording is cloned from a copy, and the recording is never changed.
+- Before VoxCPM2 clones a reference, the breaths in its pauses are turned down by 20 dB, and the reference is compressed gently, then normalized to a -1 dB peak. Clones no longer take on a breathy manner. A user's recording is cloned from a copy, and the recording is never changed.
 - A designed VoxCPM2 voice speaks its opening again, calm and natural at a slow pace, and that becomes the reference. Clones follow the reference's pace and manner.
 - VoxCPM2 is never time-stretched. The pace line points to `--style` or a delivery note, and `--speed` with VoxCPM2 warns. A stretch turned the voice's faint crackle in an "s" into audible static.
 - VoxCPM2 speaks the whole script as one take, then sets the silence at each blank line and `[pause]` mark. A failing take is spoken again by beats, then by sentences.
