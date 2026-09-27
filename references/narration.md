@@ -15,7 +15,7 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
 | A plain script (brief or file)                                      | `speak` their words exactly, adding only line breaks and pause marks. Ask before changing any word. If a word fails the speech check, show what was heard and propose a fix. |
 | A script with times per line (`0-5s: …`, `[00:05] …`, `10 sec - …`) | `speak` starts each line at its time and reports lines that overrun. Shorten them with the user, or give more time. Size scenes to the same times.                           |
 | Subtitles (`.srt`, `.vtt`) with a recording                         | The file as `voiceover.script`: its words go on screen, its times hold each line in place.                                                                                   |
-| Their own voice, to clone                                           | `--reference their-voice.wav` (VoxCPM2), or their cloning TTS through `--command`. Only their voice, or one they have consent for.                                           |
+| Their own voice, to clone                                           | `--reference their-voice.wav` (VoxCPM2), or their cloning TTS through `--command`. Only their own voice, or a voice they have consent to use.                                |
 | Their own TTS or a paid service                                     | `--command` with its CLI, or `"tts": { "command": … }` in the config.                                                                                                        |
 | A language, accent or voice in mind                                 | An engine that speaks it (`references/tts.md`). Never narrate a language the voice cannot speak. With none, ask for their TTS or a recording.                                |
 | Only a topic, with narration asked for                              | Write the script from the gathered facts, then `speak` it.                                                                                                                   |
@@ -42,27 +42,38 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
   | A change of feeling        | Emotion that moves with the story           | A delivery note on that line (VoxCPM2)         |
 
 - **First line orients:** it names the subject or the question, before any scenario ("Three ways to cut your water bill.", not "So you open the app.").
-- **Pace:** `speak` aims at about 4.1 syllables per second while speaking (3.5 to 4.7), a relaxed explainer. Match it to the narration: a lesson reads slower, a launch or an ad faster. A natural take inside the range needs no `--speed`. `speak` prints the pace and the `--speed` that reaches it (`0.85` is 15% slower, pitch kept). `--pace 4.2` sets another target, for a calmer or brisker read. `"tts": { "speed": 0.9, "pace": 4.3 }` sets both for every video.
+- **Pace:** `speak` aims at about 4.1 syllables per second while speaking (3.5 to 4.7), a relaxed explainer. Match it to the narration: a lesson reads slower, a launch or an ad faster. A natural take inside the range needs no change. `speak` prints the pace and how to reach the range. With VoxCPM2, the reference sets most of the pace: a designed voice is spoken again calm and natural at a slow pace, and a recording to clone is best recorded that way. Pace words in `--style` and every delivery note ("slow pace") adjust it (`tts/voxcpm2.md`). Kokoro sets `--speed` natively. Other engines are time-stretched by `--speed` (`0.85` is 15% slower, pitch kept). A stretch turns a voice's faint crackle in an "s" into audible static, so VoxCPM2 is never stretched. `--pace 4.2` sets another target, for a calmer or brisker read. `"tts": { "speed": 0.9, "pace": 4.3 }` sets both for every video.
 
 ## Text to speech
 
-`speak script.txt` writes `assets/voiceover.wav`, and `assets/voiceover.txt` beside it without the pause marks (for captions and `transcribe`). A source script at that path keeps its marks: the spoken words then go to `voiceover.spoken.txt`. Set `"voiceover": { "file": …, "script": … }` as `speak` prints it.
+`speak script.txt` writes `assets/voiceover.wav`, and `assets/voiceover.txt` beside it without the pause marks (for captions and `transcribe`). A source script at that path keeps its marks: the spoken words then go to `voiceover.spoken.txt`. With `--written script.txt`, `voiceover.txt` holds the written script's words and punctuation instead. Set `"voiceover": { "file": …, "script": … }` as `speak` prints it.
 
 - **Engine:** choosing one, and the steps for any engine: `references/tts.md`. Each engine's voice, delivery and writing rules: its guide in `references/tts/`.
 
 ### Prepare the script for speech
 
-A voice reads only the text. Its punctuation, spelling and word order are all it has for pauses, stress and pronunciation. Prepare the whole script before `speak`:
+A voice reads only the text. Its punctuation, spelling and word order are all it has for pauses, stress and pronunciation. When the user supplied the audio, none of this applies. Otherwise, pick the engine first (`references/tts.md`) and read its guide (`references/tts/<engine>.md`): marks, notes and tags behave differently per engine. Then prepare the whole script before `speak`:
 
-1. **Run `speak script.txt --review`.** It generates nothing and lists what a voice is likely to misread: flags, file names and addresses, letters mixed with digits, digits outside English, long sentences with no comma, lines with no end punctuation, and with VoxCPM2 a question without its own delivery note.
-2. **Punctuate for the ear, not for grammar.** The voice pauses only where the text marks it:
-   - **Comma:** a short breath. Put one wherever a listener needs the break, even where grammar has none: after a long or ambiguous subject ("Whisper, times every word."), before a new clause, around an aside.
-   - **Period:** the end of a thought, with a full stop in the voice. Split a long sentence into two for a stronger break.
-   - **Ellipsis "…":** a trailing or held pause, for suspense or a thought left open.
-   - **Dash "—":** an aside or a turn, with a pause on each side.
-   - **Question mark:** the rising end of a question.
+1. **Run `speak script.txt --review`.** It generates nothing and lists what a voice is likely to misread: flags, file names and addresses, letters mixed with digits, digits outside English, a missing breath after an opening word, sentences of 9 words or more with no breath, lines with no end punctuation, and with VoxCPM2 a question without its own delivery note.
+2. **Punctuate for the ear, not for grammar.** To a voice, a comma is a pause, and a pause is emphasis: it lets the listener rest, and it gives weight to the word before or after it. Put a mark where the listener should pause, or where a word should land, never only where grammar puts one. The voice pauses only where the text marks it. How long each mark pauses depends on the engine: its guide in `references/tts/` gives the measured lengths.
 
-   Read each sentence as it will be heard. A word that can be a noun or a verb after a noun ("recognition times each word") is read as part of the noun unless a comma or a rewording separates them. Captions show this punctuation too.
+   - **Comma:** a short breath, wherever a listener needs a break, even where grammar has none:
+
+     | Breath                             | Written                            | Spoken                                       |
+     | ---------------------------------- | ---------------------------------- | -------------------------------------------- |
+     | After an opening word              | Then the bees seal it.             | Then, the bees seal it.                      |
+     | After the subject, before its verb | The morning train leaves at six.   | The morning train, leaves at six.            |
+     | Around a middle "then"             | It cools then the glaze goes on.   | It cools, then, the glaze goes on.           |
+     | Before a joined phrase             | They pack the boxes and load them. | They pack the boxes, and load them.          |
+     | A closing "too", either way        | Bring a friend too. (runs on)      | Bring a friend, too. (a pause, for emphasis) |
+
+     Grammar forbids the comma between a subject and its verb, and a voice needs it most there. Which breaths a line takes is the writer's call: "So, how long does it take?" and "So how long does it take?" ask different things.
+
+   - **Period, ellipsis, em dash and question mark:** a full stop, a held or trailing pause, a set-off aside, and a rising end. Their lengths, and whether a mark pauses at all, differ by engine (its guide).
+
+   Read each sentence as it will be heard. A word that can be a noun or a verb after a noun ("the project records sound") is read as part of the noun unless a comma or a rewording separates them.
+
+   - **Two scripts:** ear punctuation reads as errors in captions. Keep the grammar version in its own file, with the same words, and pass both: `speak ear.txt --written script.txt`. The voice speaks the ear script. Captions, `transcribe` and phrase spans show the written one. `speak` stops before any audio when their words differ. Only punctuation, case and spacing can differ.
 
 3. **Give every unusual token a spoken form** with `{written|spoken}`: names, acronyms the voice might say as a word, symbols, file names, versions.
 4. **End every question with "?"**, and every statement with a period. With VoxCPM2, a question also needs a line of its own with a delivery note, or the take's delivery can flatten it into a statement (`tts/voxcpm2.md`). `--review` flags a question without one.
@@ -91,7 +102,7 @@ Kokoro, Hugging Face models and the user's TTS keep every mark exact. VoxCPM2 sp
 
 `speak` processes the generated voice as its own layer, sentence by sentence, and reports what it did. `--raw` skips it.
 
-- **Pace:** a sentence more than 12% off the median pace is time-stretched to the edge of that band, by at most 15%, pitch kept. A long take tends to slow toward its end. Sentences under 1 s of speech stay as they are. A timed script keeps its pace.
+- **No time stretch:** polish never changes the pace. A stretch turns a voice's faint crackle in an "s" into audible static.
 - **Loudness:** each sentence's speech moves toward the median level, by at most 6 dB, with 40 ms ramps. A long take tends to start louder than it goes on.
 - **De-essing:** where an "s" rises above the voice's vowels, the 4.5–11 kHz band is turned down to 4 dB under them.
 
@@ -103,7 +114,7 @@ The user's own recordings never pass through it.
 
 - **Words:** extra speech (babble after the text, a stray word) and missing words.
 - **Numbers:** every number must be heard as the script says it.
-- **Glitches (VoxCPM2):** a click, a thump before or after the speech, and a take cut off mid-sound. Every take's edges fade over a few milliseconds, so joins never click.
+- **Glitches (VoxCPM2):** a click in a pause is smoothed, and a thump before or after the speech is silenced, in place. Speech itself is never edited: inside a word, a /t/ or /k/ burst has a click's shape. A click the repair leaves is marked `ok ?`: listen to it. A take cut off mid-sound is spoken again. Every take's edges fade over a few milliseconds, so joins never click.
 - **Doubtful words:** when a passing phrase has words heard differently, a second Whisper model hears it too. A word both models miss is marked `ok ?`: listen to it.
 - **Stray pauses:** a pause over 0.45 s between two words with no punctuation between them is marked `ok ?`. A voice phrases by how it reads the grammar, so a word that can be a noun or a verb ("recognition times each word") can pull the pause to the wrong place. A comma where the break belongs, or a rewording, sets it.
 - **`ok ?` without audio playback:** reword the line, or give the name a spoken form (`{written|spoken}`), then run `speak` again. The line is settled when both recognizers hear it as written.

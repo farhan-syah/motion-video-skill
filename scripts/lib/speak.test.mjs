@@ -40,14 +40,21 @@ const voice = (seconds, rate = 48000) => {
   return x;
 };
 
-test('a clean take passes, and a click, a thump or a cut-off end is caught', async () => {
+test('a clean take passes, a click and a thump are found, and a cut-off end fails', async () => {
   const { tidy, clicks } = await import('./speak.mjs');
   const clean = voice(1.2);
   assert.deepEqual(tidy(clean).faults, []);
   assert.deepEqual(clicks(tidy(clean).samples), []);
-  const clicked = voice(1.2);
-  clicked[30000] += 0.8;
+  // A click in a pause between two words is found.
+  const clicked = new Float32Array(48000 * 1.5);
+  clicked.set(voice(0.5), 0);
+  clicked.set(voice(0.5), 48000);
+  clicked[36000] += 0.8;
   assert.equal(clicks(tidy(clicked).samples).length, 1);
+  // The same spike inside a word is left alone: a /t/ burst there has its shape.
+  const spoken = voice(1.2);
+  spoken[30000] += 0.8;
+  assert.deepEqual(clicks(tidy(spoken).samples), []);
   // A consonant burst: 12 ms of loud noise, as sharp as a click but far wider. Speech, not a glitch.
   const burst = voice(1.2);
   let seed = 1;
@@ -56,7 +63,12 @@ test('a clean take passes, and a click, a thump or a cut-off end is caught', asy
   const thumped = new Float32Array(48000 * 1.5);
   thumped.set(voice(0.05), 0);
   thumped.set(voice(1.2), Math.round(0.1 * 48000));
-  assert.match(tidy(thumped).faults.join(), /thump before the speech/);
+  // A thump is silenced in place, and the speech after it is kept.
+  const t = tidy(thumped);
+  assert.deepEqual(t.faults, []);
+  assert.match(t.repairs.join(), /thump before the speech/);
+  assert.ok(t.samples.subarray(0, 2400).every((v) => v === 0));
+  assert.equal(t.samples[Math.round(0.5 * 48000)], thumped[Math.round(0.5 * 48000)]);
   const cut = voice(1.2).subarray(0, 48000);
   assert.match(tidy(cut).faults.join(), /cut off/);
 });
@@ -167,9 +179,9 @@ test('the script review flags what a voice is likely to misread', async () => {
     [3, 'This sentence keeps going on and…'],
   ]);
   assert.deepEqual(review('Tiga puluh bahasa. Harga 25 ringgit.', { language: 'ms' }).map((r) => r.text), ['25']);
-  // A sentence of 14 words or fewer is left alone. One of 15 with no comma is flagged.
-  assert.equal(review('One two three four five six seven eight nine ten eleven twelve thirteen fourteen.').length, 0);
-  assert.equal(review('One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen.').length, 1);
+  // A sentence of 8 words or fewer is left alone. One of 9 with no breath is flagged.
+  assert.equal(review('One two three four five six seven eight.').length, 0);
+  assert.equal(review('One two three four five six seven eight nine.').length, 1);
 });
 
 test('a dash or ellipsis standing alone is a break, not a stray pause', async () => {
@@ -180,10 +192,12 @@ test('a dash or ellipsis standing alone is a break, not a stray pause', async ()
   assert.deepEqual(strayPauses(heard, 'She passes it on — mouth to mouth — to a bee.', alignScript), []);
 });
 
+// A second of voice with a 0.2 s pause in its middle.
+const paused = (rate = 48000) => Float32Array.from({ length: rate }, (_, i) => (i >= 19200 && i < 28800 ? 0 : 0.3 * Math.sin((2 * Math.PI * 150 * i) / rate)));
+
 test('a click is repaired in place, and the voice around it is kept', async () => {
   const { clicks, declick } = await import('./speak.mjs');
-  const rate = 48000;
-  const x = Float32Array.from({ length: rate }, (_, i) => 0.3 * Math.sin((2 * Math.PI * 150 * i) / rate));
+  const x = paused();
   x[24000] += 0.8;
   const found = clicks(x);
   assert.equal(found.length, 1);
@@ -194,10 +208,65 @@ test('a click is repaired in place, and the voice around it is kept', async () =
   assert.equal(y[40000], x[40000]);
 });
 
+test('a click spread over more of the wave is smoothed over a wider span', async () => {
+  const { clicks, repairClicks } = await import('./speak.mjs');
+  const x = paused();
+  x[24000] += 0.8;
+  x[24200] -= 0.8;
+  const r = repairClicks(x);
+  assert.ok(clicks(x).length >= 1);
+  assert.deepEqual(r.left, []);
+  assert.ok(r.fixed.length >= 1);
+  assert.equal(r.samples[1000], x[1000]);
+});
+
 test('with VoxCPM2, a question needs a delivery note and a line of its own', async () => {
   const { review } = await import('./speak.mjs');
   const script = 'So how long does it take?\nDays. And the bees, what do they do?\n(calm, curious tone, rising intonation) Where does it go?';
   const flagged = review(script, { notes: true }).map((r) => [r.line, r.text]);
   assert.deepEqual(flagged, [[1, 'So how long does it take?'], [2, 'And the bees, what do they do?']]);
   assert.deepEqual(review(script), []);
+});
+
+test('the review asks for the breaths a spoken sentence needs', async () => {
+  const { review } = await import('./speak.mjs');
+  const script = 'Then it gathers facts and chooses a direction.\nThen, it gathers facts, and chooses a direction.\nThe bees fan their wings until most of the water is gone.\nYou can bring your own tool, too.\nYou can bring your own tool too.';
+  // A comma before a closing "too" is the writer's choice (a pause for emphasis, or none), so neither is flagged.
+  assert.deepEqual(
+    review(script).map((r) => r.line),
+    [1, 3],
+  );
+  assert.match(review('The bees fan their wings until most of the water is gone.')[0].note, /before "until"/);
+});
+
+test('a written script gives captions its punctuation, and holds the same words as the ear script', async () => {
+  const { writtenScript } = await import('./speak.mjs');
+  const ear = 'Then, it gathers facts, and chooses a direction.\n\nThe {VoxCPM2|Vox C P M two} voice — calm.';
+  const w = writtenScript(ear, 'Then it gathers facts and chooses a direction.\n\nThe VoxCPM2 voice: calm.');
+  assert.equal(w.text, 'Then it gathers facts and chooses a direction. The VoxCPM2 voice: calm.');
+  const spans = w.spans([
+    { text: 'Then, it gathers facts, and chooses a direction.', start: 0, end: 3 },
+    { text: 'The VoxCPM2 voice — calm.', start: 3.5, end: 5 },
+  ]);
+  assert.deepEqual(spans.map((p) => p.text), ['Then it gathers facts and chooses a direction.', 'The VoxCPM2 voice: calm.']);
+  assert.equal(spans[1].start, 3.5);
+  assert.throws(() => writtenScript(ear, 'Then it collects facts and chooses a direction. The VoxCPM2 voice: calm.'), /differ at "gathers" in the ear script and "collects"/);
+});
+
+test('breath in a pause is turned down, and the voice is kept', async () => {
+  const { quietBreaths, breathiness } = await import('./speak.mjs');
+  // Two words with a 0.3 s breath between them: soft noise, about 30 dB under the voice.
+  const x = new Float32Array(48000 * 1.5);
+  x.set(voice(0.5), 0);
+  x.set(voice(0.5), 48000);
+  let seed = 7;
+  for (let k = 26400; k < 40800; k++) x[k] = 0.012 * (((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1);
+  assert.ok(breathiness(x) > 0.1);
+  const q = quietBreaths(x);
+  assert.equal(q.runs, 1);
+  assert.ok(breathiness(q.samples) < breathiness(x));
+  assert.ok(Math.abs(q.samples[33600]) <= Math.abs(x[33600]) * 0.11);
+  // The words are untouched.
+  assert.equal(q.samples[12000], x[12000]);
+  assert.equal(q.samples[60000], x[60000]);
 });

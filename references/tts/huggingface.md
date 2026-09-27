@@ -10,6 +10,7 @@
 | PyTorch only | In Python, through the transformers pipeline (`scripts/tts/hf_speak.py`), with `uv` | A 1.1 GB Python environment, then the model |
 
 - **Loads in neither:** the model is not a transformers text-to-speech model (Parler, F5 and XTTS need their own package). Run it through `--command` (`command.md`).
+- **Marks:** how long each mark pauses is untested for this engine. Speak one line with a comma, an em dash and an ellipsis first, and hear or measure it.
 - **Phrase by phrase:** each sentence is spoken alone, and the script's pause marks join them exactly.
 - **Voice and delivery:** the model's own. `--voice`, delivery notes and tags do not apply. `--speed` time-stretches the result, pitch kept.
 - **The check:** the whole file is heard back once. A problem prints and exits 1.

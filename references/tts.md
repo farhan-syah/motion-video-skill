@@ -36,7 +36,7 @@ With no engine flag or config, `speak` picks the best engine this machine runs: 
 
 A script feature an engine lacks is dropped for it, never spoken: delivery notes and tags are VoxCPM2 only.
 
-Every engine's output gets the voice polish: pace and loudness evened sentence by sentence, and de-essing (`narration.md`, Voice polish). The user's own recordings are never processed.
+Every engine's output gets the voice polish: loudness evened sentence by sentence, and de-essing (`narration.md`, Voice polish). The user's own recordings are never processed.
 
 ## Steps for any engine
 
@@ -45,7 +45,7 @@ Every engine's output gets the voice polish: pace and loudness evened sentence b
 3. **Try one beat** with the chosen voice before the whole script.
 4. **Speak the script** as one file: `speak script.txt`. Pass `--language` for narration outside English.
 5. **Read the speech check** (`narration.md`, Speech check). A problem exits 1 with its fix.
-6. **Read the pace line.** A natural take inside the printed range needs no `--speed`.
+6. **Read the pace line.** A natural take inside the printed range needs no change. Outside it, the line says how to reach it for that engine.
 7. **Listen once** when playback is available. Report when it was not.
 
 ## Defaults

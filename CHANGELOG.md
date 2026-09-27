@@ -8,24 +8,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- `speak` polishes a generated voice sentence by sentence: pace and loudness evened, then de-essing. `--raw` skips it.
+- `speak` polishes a generated voice sentence by sentence: loudness evened, then de-essing. `--raw` skips it.
 - `render` writes each audio layer to `out/stems/`: voice, music and effects, as they sit in the mix.
 - `speak --hifi` clones VoxCPM2 from the reference and its exact transcript. A designed voice saves the words it was designed on.
+- `speak --written FILE` pairs the ear script with a written one. The voice speaks the ear script's pauses. Captions and `transcribe` show the written script's punctuation.
 
 ### Changed
 
+- Before VoxCPM2 clones a reference, the breaths in its pauses are turned down by 20 dB. Clones no longer take on a breathy manner. A user's recording is cloned from a copy, and the recording is never changed.
+- A designed VoxCPM2 voice speaks its opening again, calm and natural at a slow pace, and that becomes the reference. Clones follow the reference's pace and manner.
+- VoxCPM2 is never time-stretched. The pace line points to `--style` or a delivery note, and `--speed` with VoxCPM2 warns. A stretch turned the voice's faint crackle in an "s" into audible static.
 - VoxCPM2 speaks the whole script as one take, then sets the silence at each blank line and `[pause]` mark. A failing take is spoken again by beats, then by sentences.
 - VoxCPM2 phrase spans are per sentence.
 - The pitch-swing check runs per sentence and skips questions, sentences under 0.8 s of voicing and octave errors.
-- `narration.md` covers punctuating a script for the ear: what a comma, period, ellipsis, dash and question mark do to the voice.
-- `speak --review` flags sentences over 14 words with no inner punctuation, and with VoxCPM2 a question without its own line and delivery note.
+- `narration.md` covers punctuating a script for the ear, with before-and-after examples of where a spoken sentence breathes.
+- How long each punctuation mark pauses is documented per engine, measured on VoxCPM2 and Kokoro. A script for text to speech is written after reading the engine's guide.
+- `speak --review` flags a missing breath after an opening word, sentences of 9 words or more with no breath, and with VoxCPM2 a question without its own line and delivery note.
 - `narration.md` lists the devices spoken narration uses, and the VoxCPM2 guide states what makes a read flat or expressive.
 - The VoxCPM2 guide states how delivery notes behave, with an example of a script directed where it turns.
 
 ### Fixed
 
+- The docs and cloning guidance name the voice that can be cloned: the user's own, or one they have consent to use.
 - A dash or ellipsis standing alone counts as a break in the stray-pause check.
-- A click in a take is repaired in place before the take is judged, instead of failing the take.
+- VoxCPM2 repairs a click or a thump in a take in place instead of speaking the take again. A click left after the repair is marked `ok ?`. A designed voice's reference is repaired the same way.
+- The click check counts only a spike in a pause. Inside speech it had flagged /t/ bursts as clicks.
 
 ## [1.3.0] - 2026-09-26
 

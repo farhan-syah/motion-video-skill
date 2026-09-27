@@ -37,7 +37,8 @@ test('a struck material is a timbre, not an intent; paper stays both', () => {
 
 test('the page-side cue reader knows every material', () => {
   const src = collectCues.toString();
-  for (const m of Object.keys(MATERIALS)) assert.ok(src.includes(`'${m}'`), `collectCues does not list material "${m}"`);
+  // Bun prints a function's source with double quotes, Node as written: either quote counts.
+  for (const m of Object.keys(MATERIALS)) assert.ok(src.includes(`'${m}'`) || src.includes(`"${m}"`), `collectCues does not list material "${m}"`);
 });
 
 test('every sound in the catalog carries a listener description for the review', () => {

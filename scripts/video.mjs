@@ -31,7 +31,7 @@ Commands:
                                  --land replaces the outlines with precise polygons, --layer draws lines and areas.
                                  Default size: the manifest's. --countries lists every country name.
   speak TEXT|FILE [--engine kokoro|voxcpm] [--voice V] [--style S] [--reference WAV] [--speed S] [--pace P] [--seed N]
-        [--reroll 3,7] [--cfg 1.6] [--steps 16] [--hifi] [--review] [--raw]
+        [--reroll 3,7] [--cfg 1.6] [--steps 16] [--hifi] [--written FILE] [--review] [--raw]
         [--language L]
         [--model HF_ID | --command "TEMPLATE" [--one-call]] [--out WAV]
                                  Narration from a script. Writes the WAV and its script next to it (default
@@ -113,6 +113,7 @@ function parseArgs(argv) {
     else if (a === '--review') opts.review = true;
     else if (a === '--raw') opts.raw = true;
     else if (a === '--hifi') opts.hifi = true;
+    else if (a === '--written') opts.written = argv[++i];
     else if (a === '--engine') opts.engine = argv[++i];
     else if (a === '--reference') opts.reference = argv[++i];
     else if (a === '--device') opts.device = argv[++i];
@@ -321,6 +322,16 @@ async function speakCmd(opts) {
     console.log('');
   }
   if (opts.review) return 0;
+  if (engineFor === 'voxcpm' && (opts.speed ?? tts.speed ?? 1) !== 1) console.error('speak --speed: VoxCPM2 is time-stretched after it speaks, which turns its faint crackle in an "s" into audible static. Set the pace in --style and every delivery note ("slow pace", "speaking slowly") instead, and drop --speed.');
+  // --written: the same words with grammar's punctuation, for captions. Checked before any audio is made.
+  let written = null;
+  if (opts.written) {
+    if (!existsSync(opts.written)) throw new ManifestError(`speak --written ${opts.written}: no such file. Pass the written script: the same words as the ear script, punctuated for reading.`);
+    const { writtenScript } = await import('./lib/speak.mjs');
+    const wraw = readFileSync(opts.written, 'utf8').trim();
+    const wcues = parseTimedScript(wraw);
+    written = writtenScript(script, wcues ? wcues.map((c) => c.text).join('\n') : wraw);
+  }
   const out = resolve(opts.out ?? 'assets/voiceover.wav');
   mkdirSync(dirname(out), { recursive: true });
   const { duration, engine, problems = [], phrases: made, checks = [], timing = [] } = await speak(script, out, {
@@ -339,10 +350,10 @@ async function speakCmd(opts) {
   let phrases = made;
   if (!opts.raw) {
     const { polish } = await import('./lib/speak.mjs');
-    const done = polish(out, phrases ?? [], { pace: !cues });
+    const done = polish(out, phrases ?? []);
     if (phrases) phrases = done.phrases;
     const s = done.stats;
-    console.log(`Voice polish: pace evened in ${s.paced} sentence(s)${s.paced ? ` (up to ${Math.round(s.maxStretch * 100)}%)` : ''}, loudness in ${s.leveled}${s.leveled ? ` (up to ${s.maxGain.toFixed(1)} dB)` : ''}, harsh "s" turned down in ${(s.essShare * 100).toFixed(1)}% of the audio${s.essShare ? ` (up to ${(-s.essDeepest).toFixed(1)} dB)` : ''}. --raw skips this.`);
+    console.log(`Voice polish: loudness evened in ${s.leveled} sentence(s)${s.leveled ? ` (up to ${s.maxGain.toFixed(1)} dB)` : ''}, harsh "s" turned down in ${(s.essShare * 100).toFixed(1)}% of the audio${s.essShare ? ` (up to ${(-s.essDeepest).toFixed(1)} dB)` : ''}. --raw skips this.`);
   }
   // The verdict judges the value as printed, so a pace on the range's edge never reads as outside it.
   const rate = phrases ? Math.round(pace(phrases, out) * 10) / 10 : null;
@@ -351,7 +362,9 @@ async function speakCmd(opts) {
   const aim = Math.round(Math.min(1.5, Math.max(0.6, (at * target) / rate)) * 100) / 100;
   const lo = +(target - 0.6).toFixed(1);
   const hi = +(target + 0.6).toFixed(1);
-  if (rate) console.log(`Pace: ${rate.toFixed(1)} syllables per second while speaking${rate > hi ? `: faster than the ${lo} to ${hi} range. --speed ${aim} reaches ${target}.` : rate < lo ? `: slower than the ${lo} to ${hi} range. --speed ${aim} reaches ${target}.` : `: in the ${lo} to ${hi} range around ${target}.`}`);
+  // VoxCPM2 sets its pace in the take, from the delivery note. A time stretch would turn its faint crackle into static.
+  const fix = (slower) => (/^VoxCPM2/.test(engine) ? `Ask for a ${slower ? 'slower' : 'quicker'} pace in --style and in every delivery note, which replaces --style for its line ("${slower ? 'slow pace' : 'slightly faster'}"), then speak again.` : `--speed ${aim} reaches ${target}.`);
+  if (rate) console.log(`Pace: ${rate.toFixed(1)} syllables per second while speaking${rate > hi ? `: faster than the ${lo} to ${hi} range. ${fix(true)}` : rate < lo ? `: slower than the ${lo} to ${hi} range. ${fix(false)}` : `: in the ${lo} to ${hi} range around ${target}.`}`);
   if (cues) {
     console.log(`Timed script: ${cues.length} lines placed at their times.`);
     for (const t of timing) console.log(`  ${t}`);
@@ -360,11 +373,13 @@ async function speakCmd(opts) {
   // A source script at that same path keeps its marks and time stamps: the spoken words go beside it instead.
   const plain = out.replace(/\.[^./]+$/, '.txt');
   const txt = existsSync(arg) && resolve(arg) === plain ? plain.replace(/\.txt$/, '.spoken.txt') : plain;
+  // With --written, captions show the written script's punctuation, not the ear script's pauses.
   const { spoken } = await import('./lib/speak.mjs');
-  writeFileSync(txt, `${spoken(script)}\n`);
+  const shownText = written ? written.text : spoken(script);
+  writeFileSync(txt, `${shownText}\n`);
   // Where each phrase sits in the audio: transcribe keeps every word inside its own phrase.
   const { phrasesFile } = await import('./lib/voice.mjs');
-  if (phrases) writeFileSync(phrasesFile(out), JSON.stringify({ script: spoken(script), phrases }, null, 1));
+  if (phrases) writeFileSync(phrasesFile(out), JSON.stringify({ script: shownText, phrases: written ? written.spans(phrases) : phrases }, null, 1));
   else rmSync(phrasesFile(out), { force: true });
   const rel = (f) => relative(process.cwd(), f);
   console.log(`${rel(out)} (${duration.toFixed(2)}s, ${engine}) and its script ${rel(txt)}
@@ -373,7 +388,7 @@ or "audio": "${rel(out)}" and "script": "${rel(txt)}" on the one scene it narrat
   // Every phrase as it was heard back, so a wrong word shows even when the check passes it.
   console.log('\nHeard back, phrase by phrase:');
   const { HEATED } = await import('./lib/speak.mjs');
-  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length || c.heat > HEATED || c.pauses?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.heat > HEATED ? `\n        ${c.hotText ? `"${c.hotText.slice(0, 60)}": ` : ''}its pitch peaks at ${c.heat}x the voice's usual pitch: it may sound shouted or excited. Listen, then calm its delivery note or --reroll it` : ''}${(c.pauses ?? []).map((p) => `\n        a ${p.gap}s pause between "${p.after}" and "${p.before}", where the script has no break: the voice may have misread the grammar. Add a comma where the break belongs, or reword`).join('')}${c.doubt?.length ? `\n        both recognizers missed or misheard ${c.doubt.map((w) => `"${w}"`).join(', ')}: listen to it, and ${/^VoxCPM2/.test(engine) ? '--reroll this phrase' : 'reword the phrase'} if it is said wrong` : ''}`);
+  for (const c of checks) console.log(`  ${c.ok ? (c.doubt?.length || c.heat > HEATED || c.pauses?.length || c.clicks?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.heat > HEATED ? `\n        ${c.hotText ? `"${c.hotText.slice(0, 60)}": ` : ''}its pitch peaks at ${c.heat}x the voice's usual pitch: it may sound shouted or excited. Listen, then calm its delivery note or --reroll it` : ''}${(c.pauses ?? []).map((p) => `\n        a ${p.gap}s pause between "${p.after}" and "${p.before}", where the script has no break: the voice may have misread the grammar. Add a comma where the break belongs, or reword`).join('')}${c.clicks?.length ? `\n        a click the repair could not smooth, ${c.clicks.map((v) => `${v}s`).join(', ')} into this part: listen to it, and --reroll this phrase if it is heard` : ''}${c.doubt?.length ? `\n        both recognizers missed or misheard ${c.doubt.map((w) => `"${w}"`).join(', ')}: listen to it, and ${/^VoxCPM2/.test(engine) ? '--reroll this phrase' : 'reword the phrase'} if it is said wrong` : ''}`);
   if (problems.length) {
     console.log(`\nThe speech check found ${problems.length} problem(s), heard back with Whisper:`);
     for (const p of problems) console.log(`  ${p}`);

@@ -21,6 +21,7 @@ Try two or three voices on one line, and keep the one that fits the narration.
 ## How `speak` uses it
 
 - **Phrase by phrase:** each sentence is spoken alone, and the script's pause marks join them exactly (`narration.md`, Pauses).
+- **Marks, measured on Kokoro:** a comma pauses about 0.27 s. An em dash barely pauses (about 0.09 s), so it gives no longer break here: use a period or `[pause]` for one. A period or ellipsis ends a phrase, and `speak` joins phrases with its own pause (Pauses, in `narration.md`).
 - **Speed:** `--speed` changes Kokoro's own speaking rate, with no time-stretch.
 - **Delivery:** none beyond the voice and speed. Delivery notes and tags are dropped.
 - **The check:** the whole file is heard back once. A problem prints and exits 1: reword the line and run again. There are no cached takes and no `--reroll`.
