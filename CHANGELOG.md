@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-09-27
+
 ### Fixed
 
 - VoxCPM2 takes its pace from the reference alone. The guide, `narration.md` and the pace line no longer suggest pace words in `--style` or a note: on top of the slow reference they skewed the voice and dragged words out. A take outside the range needs another reference or `--seed`.
@@ -153,7 +155,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Master MP4 and `-compressed.mp4` copy.
 - `doctor`, `version` and `update` commands.
 
-[unreleased]: https://github.com/farhan-syah/motion-video-skill/compare/v1.4.0...HEAD
+[unreleased]: https://github.com/farhan-syah/motion-video-skill/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/farhan-syah/motion-video-skill/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/farhan-syah/motion-video-skill/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/farhan-syah/motion-video-skill/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/farhan-syah/motion-video-skill/compare/v1.1.0...v1.2.0
