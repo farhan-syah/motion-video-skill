@@ -32,24 +32,15 @@ OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description
 
 ## Delivery
 
-- **Write an instruction as sound:** tone, emotion and pace, the way VoxCPM2's guide does: `(slightly faster, cheerful tone)`, `(speaking very fast, bright and full)`. Describe how the voice behaves, never what the line means: `(curious tone, rising intonation)`, not `(asking a question)`.
-- **`--style "(calm, warm tone, slow pace)"`** steers every generation. It changes emotion, pace and delivery, never the voice.
+- **Write an instruction as sound:** tone and emotion, the way VoxCPM2's guide does: `(cheerful tone)`, `(bright and full)`. Never pace (below). Describe how the voice behaves, never what the line means: `(curious tone, rising intonation)`, not `(asking a question)`.
+- **`--style "(calm, warm tone)"`** steers every generation. It changes emotion and delivery, never the voice.
 - **The reference sets the clone:** a clone takes its pace, manner and tone from the reference, far more than from any note. So `speak` prepares every reference before cloning. A designed voice's reference is changed in place. A user's recording is cloned from a prepared copy in the cache, and the recording itself is never changed. Record a voice to clone calm and natural, at the pace the narration wants.
   - **Pace and manner:** a designed voice speaks its opening again from itself, "(calm, natural tone, speaking slowly)", and that becomes the reference. If it is still faster than 3.9 syllables per second (pauses included), it speaks once more, very slowly. Measured on one voice, with the same style and no pace words, a reference at 4.3 gave clones at 5.0, and a reference spoken slowly, at 3.8, gave 3.9. An emphatic reference, with a harsh "s", gives emphatic clones. Without "natural", the re-spoken reference sounded angry. The design as first spoken stays in the cache as `voice-<key>.design.wav`.
   - **Breaths:** a breathy reference, with breath between its words, gives clones a stray "hh" through their words. The breaths in its pauses are turned down by 20 dB, the speech untouched.
   - **Bass:** a thin reference gives a thin voice, hard on the ear. A reference whose 120-250 Hz band sits under its 1-2 kHz band gets a low shelf at 250 Hz, up to +9 dB, until they are level. A reference with enough bass is left as it is.
   - **Compression:** threshold -22 dB, ratio 1.5, a 30 dB soft knee, 2 ms attack, 450 ms release, +3.6 dB make-up. It evens the syllables.
   - **Normalizing:** the DC offset removed and the peak set to -1 dB.
-- **Pace is set in the take:** `speak` never time-stretches VoxCPM2, and ignores `--speed` for it. Pace words move it less than the reference does. Measured on one voice and excerpt (syllables per second while speaking):
-
-  | Pace words        | Pace            |
-  | ----------------- | --------------- |
-  | none              | 5.0             |
-  | "unhurried pace"  | 5.1 (no change) |
-  | "slow pace"       | 4.3             |
-  | "speaking slowly" | 4.2             |
-
-  A delivery note replaces `--style`, so a pace in `--style` never reaches a noted line: write it into each note too.
+- **Pace comes from the reference, never from pace words:** `speak` never time-stretches VoxCPM2, and ignores `--speed` for it. Pace words in `--style` or a note ("slow pace", "speaking slowly", "faster") skew the voice. On top of the slow reference, a note with "slow pace" read its line at 3.1 syllables per second, drawn out, the slowest in its video. Keep them out. When `speak`'s pace line reports a take outside its range, change the reference: a recording at the pace wanted, or a new `--seed` to design another voice.
 
 - **Delivery notes** open a line and replace `--style` for that line only, as its own generation, since an instruction covers everything a generation speaks: `(calm, curious tone, rising intonation) Where does the water go?`.
   - A question spoken in the beat's delivery reads as a statement. A note gives it its own intonation.

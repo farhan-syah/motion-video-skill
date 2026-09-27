@@ -324,7 +324,7 @@ async function speakCmd(opts) {
     console.log('');
   }
   if (opts.review) return 0;
-  if (engineFor === 'voxcpm' && (opts.speed ?? tts.speed ?? 1) !== 1) console.error('speak --speed: VoxCPM2 is never time-stretched, so --speed and "tts.speed" are ignored for it. Set the pace in --style and every delivery note ("slow pace", "speaking slowly").');
+  if (engineFor === 'voxcpm' && (opts.speed ?? tts.speed ?? 1) !== 1) console.error('speak --speed: VoxCPM2 is never time-stretched, so --speed and "tts.speed" are ignored for it. Its pace comes from the reference: a recording at the pace wanted, or a new --seed for another designed voice.');
   // --written: the same words with grammar's punctuation, for captions. Checked before any audio is made.
   let written = null;
   if (opts.written) {
@@ -369,8 +369,9 @@ async function speakCmd(opts) {
   const aim = Math.round(Math.min(1.5, Math.max(0.6, (at * target) / rate)) * 100) / 100;
   const lo = +(target - 0.6).toFixed(1);
   const hi = +(target + 0.6).toFixed(1);
-  // VoxCPM2 sets its pace in the take, from --style and delivery notes. A time stretch turns its faint crackle into static.
-  const fix = (slower) => (/^VoxCPM2/.test(engine) ? `Ask for a ${slower ? 'slower' : 'quicker'} pace in --style and in every delivery note, which replaces --style for its line ("${slower ? 'slow pace' : 'slightly faster'}"), then speak again.` : `--speed ${aim} reaches ${target}.`);
+  // VoxCPM2 takes its pace from the reference. Pace words skew the voice, and a time stretch turns its faint crackle
+  // into static, so the fix is another reference.
+  const fix = (slower) => (/^VoxCPM2/.test(engine) ? `VoxCPM2 takes its pace from the reference, so change the reference: a recording at the pace wanted, or a new --seed for another designed voice. Pace words in --style or a note skew the voice.` : `--speed ${aim} reaches ${target}.`);
   if (rate) console.log(`Pace: ${rate.toFixed(1)} syllables per second while speaking${rate > hi ? `: faster than the ${lo} to ${hi} range. ${fix(true)}` : rate < lo ? `: slower than the ${lo} to ${hi} range. ${fix(false)}` : `: in the ${lo} to ${hi} range around ${target}.`}`);
   if (cues) {
     console.log(`Timed script: ${cues.length} lines placed at their times.`);

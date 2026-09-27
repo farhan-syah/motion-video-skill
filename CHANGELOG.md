@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- VoxCPM2 takes its pace from the reference alone. The guide, `narration.md` and the pace line no longer suggest pace words in `--style` or a note: on top of the slow reference they skewed the voice and dragged words out. A take outside the range needs another reference or `--seed`.
+
 ## [1.4.0] - 2026-09-27
 
 ### Added

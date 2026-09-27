@@ -43,7 +43,7 @@ The user's material wins. Use it as given, fill only the gaps, and ask before ch
 
 - **First line orients:** it names the subject or the question, before any scenario ("Three ways to cut your water bill.", not "So you open the app.").
 - **Pace:** `speak` aims at about 4.1 syllables per second while speaking (3.5 to 4.7), a relaxed explainer. Match it to the narration: a lesson reads slower, a launch or an ad faster. A natural take inside the range needs no change. `speak` prints the pace and how to reach the range.
-  - **VoxCPM2:** the reference sets most of the pace. A designed voice is spoken again calm and natural at a slow pace, and a recording to clone is best recorded that way. Pace words in `--style` and every delivery note ("slow pace") adjust it (`tts/voxcpm2.md`). It is never time-stretched: a stretch turns its faint crackle in an "s" into audible static, so `--speed` is ignored for it.
+  - **VoxCPM2:** the reference sets the pace. A designed voice is spoken again calm and natural at a slow pace, and a recording to clone is best recorded that way. Pace words in `--style` or a note skew the voice, so they stay out (`tts/voxcpm2.md`). A take outside the range needs another reference: a recording at the pace wanted, or a new `--seed`. It is never time-stretched: a stretch turns its faint crackle in an "s" into audible static, so `--speed` is ignored for it.
   - **Kokoro:** `--speed` sets its speed natively.
   - **Other engines:** `--speed` time-stretches the result (`0.85` is 15% slower, pitch kept).
   - **Target:** `--pace 4.2` sets another target, for a calmer or brisker read. `"tts": { "speed": 0.9, "pace": 4.3 }` sets both for every video.
