@@ -1015,6 +1015,8 @@ function speechLevel(x, start, end, rate = 48000) {
 // stretch (ffmpeg atempo) turns a voice's faint crackle in an "s" into audible static, so pace is set in the take.
 // - level: each sentence's speech is brought toward the median level, by at most 6 dB, with 40 ms ramps. A long take
 //   starts louder than it goes on; this evens it.
+// - compression (compressVoice): evens loud and soft syllables, the same settings as a reference's. Before
+//   de-essing, since it lifts the soft parts, an "s" among them.
 // - de-essing (deEss).
 // Rewrites the file and returns the moved sentence spans and what was done.
 export function polish(file, phrases) {
@@ -1041,6 +1043,7 @@ export function polish(file, phrases) {
       }
     });
   }
+  x = compressVoice(x, rate);
   const ess = {};
   x = deEss(x, rate, ess);
   writeFileSync(file, wav([x], rate).buf);

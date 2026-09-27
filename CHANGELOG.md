@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 
-- `speak` polishes a generated voice sentence by sentence: loudness evened, then de-essing. `--raw` skips it.
+- `speak` polishes a generated voice sentence by sentence: loudness evened, gentle compression, then de-essing. `--raw` skips it.
 - `render` writes each audio layer to `out/stems/`: voice, music and effects, as they sit in the mix.
 - `speak --hifi` clones VoxCPM2 from the reference and its exact transcript. A designed voice saves the words it was designed on.
 - `speak --written FILE` pairs the ear script with a written one. The voice speaks the ear script's pauses. Captions and `transcribe` show the written script's punctuation.

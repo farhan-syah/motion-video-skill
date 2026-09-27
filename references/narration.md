@@ -104,6 +104,7 @@ Kokoro, Hugging Face models and the user's TTS keep every mark exact. VoxCPM2 sp
 
 - **No time stretch:** polish never changes the pace. A stretch turns a voice's faint crackle in an "s" into audible static.
 - **Loudness:** each sentence's speech moves toward the median level, by at most 6 dB, with 40 ms ramps. A long take tends to start louder than it goes on.
+- **Compression:** a gentle compressor evens loud and soft syllables: threshold -22 dB, ratio 1.5, a 30 dB soft knee, 2 ms attack, 450 ms release, +3.6 dB make-up. It runs before de-essing, since it lifts the soft parts, an "s" among them.
 - **De-essing:** where an "s" rises above the voice's vowels, the 4.5–11 kHz band is turned down to 4 dB under them.
 
 The user's own recordings never pass through it.

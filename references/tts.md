@@ -36,7 +36,7 @@ With no engine flag or config, `speak` picks the best engine this machine runs: 
 
 A script feature an engine lacks is dropped for it, never spoken: delivery notes and tags are VoxCPM2 only.
 
-Every engine's output gets the voice polish: loudness evened sentence by sentence, and de-essing (`narration.md`, Voice polish). The user's own recordings are never processed.
+Every engine's output gets the voice polish: loudness evened sentence by sentence, gentle compression, and de-essing (`narration.md`, Voice polish). The user's own recordings are never processed.
 
 ## Steps for any engine
 

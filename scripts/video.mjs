@@ -353,7 +353,7 @@ async function speakCmd(opts) {
     const done = polish(out, phrases ?? []);
     if (phrases) phrases = done.phrases;
     const s = done.stats;
-    console.log(`Voice polish: loudness evened in ${s.leveled} sentence(s)${s.leveled ? ` (up to ${s.maxGain.toFixed(1)} dB)` : ''}, harsh "s" turned down in ${(s.essShare * 100).toFixed(1)}% of the audio${s.essShare ? ` (up to ${(-s.essDeepest).toFixed(1)} dB)` : ''}. --raw skips this.`);
+    console.log(`Voice polish: loudness evened in ${s.leveled} sentence(s)${s.leveled ? ` (up to ${s.maxGain.toFixed(1)} dB)` : ''}, compressed gently, harsh "s" turned down in ${(s.essShare * 100).toFixed(1)}% of the audio${s.essShare ? ` (up to ${(-s.essDeepest).toFixed(1)} dB)` : ''}. --raw skips this.`);
   }
   // The verdict judges the value as printed, so a pace on the range's edge never reads as outside it.
   const rate = phrases ? Math.round(pace(phrases, out) * 10) / 10 : null;

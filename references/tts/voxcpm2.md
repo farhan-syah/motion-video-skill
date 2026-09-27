@@ -11,7 +11,7 @@ OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description
 2. **The narration:** the whole script is one generation, one take, cloning that reference. Each generation is a separate draw of the voice, so one take keeps it the same person from start to end. A line with its own delivery note is its own short generation, a timed script keeps each line apart, and a script over 700 words splits at a sentence end. One generation can run to about 11 minutes of audio.
 3. **The shape:** the script's words are found in the take. Each sentence gets its own span, and the silence at each blank line and `[pause]` mark is set to its length.
 4. **The check:** the take is heard back as a whole. A failing take regenerates under a new seed, up to 3 tries, and the best is kept. A take that fails every try is spoken again by beats, then by sentences.
-5. **The polish** (`narration.md`, Voice polish) evens its loudness and de-esses it. Its pace is set in the take, from `--style` or a delivery note. A time stretch turns its faint crackle in an "s" into audible static.
+5. **The polish** (`narration.md`, Voice polish) evens its loudness, compresses it gently and de-esses it. Its pace is set in the take, from `--style` or a delivery note. A time stretch turns its faint crackle in an "s" into audible static.
 
 ## The voice
 
