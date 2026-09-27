@@ -6,26 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-27
+
 ### Added
 
-- `speak` polishes a generated voice sentence by sentence: loudness evened, gentle compression, then de-essing. `--raw` skips it.
+- `check` warns when a text's outline is nearly its fill's color, which fills in the letters.
+- `speak` polishes a generated voice: loudness evened per sentence, gentle compression, de-essing, then the whole voice normalized to a -1 dB peak. It never changes the pace. `--raw` skips it.
 - `render` writes each audio layer to `out/stems/`: voice, music and effects, as they sit in the mix.
 - `speak --hifi` clones VoxCPM2 from the reference and its exact transcript. A designed voice saves the words it was designed on.
-- `speak --written FILE` pairs the ear script with a written one. The voice speaks the ear script's pauses. Captions and `transcribe` show the written script's punctuation.
+- `speak --written FILE` pairs the ear script with a written one. The voice speaks the ear script's pauses. Captions and `transcribe` show the written script's punctuation. Scripts whose words differ stop `speak` before any audio, with exit code 2.
 
 ### Changed
 
-- Before VoxCPM2 clones a reference, the breaths in its pauses are turned down by 20 dB, and the reference is compressed gently, then normalized to a -1 dB peak. Clones no longer take on a breathy manner. A user's recording is cloned from a copy, and the recording is never changed.
-- A designed VoxCPM2 voice speaks its opening again, calm and natural at a slow pace, and that becomes the reference. Clones follow the reference's pace and manner.
-- VoxCPM2 is never time-stretched. The pace line points to `--style` or a delivery note, and `--speed` with VoxCPM2 warns. A stretch turned the voice's faint crackle in an "s" into audible static.
-- VoxCPM2 speaks the whole script as one take, then sets the silence at each blank line and `[pause]` mark. A failing take is spoken again by beats, then by sentences.
+- Before VoxCPM2 clones a reference, the breaths in its pauses are turned down by 20 dB, a thin reference's bass is lifted, and the reference is compressed gently, then normalized to a -1 dB peak. Clones no longer take on a breathy manner. A user's recording is cloned from a copy, and the recording is never changed. A voice `speak` prepared itself, passed back as `--reference`, is used as it is.
+- A designed VoxCPM2 voice speaks its opening again, calm and natural at a slow pace, and that becomes the reference. Clones follow the reference's pace and manner. The first design stays in the cache as `voice-<key>.design.wav`.
+- VoxCPM2 is never time-stretched: `--speed` and `tts.speed` are ignored for it, with a warning. The pace line points to `--style` and every delivery note. A stretch turned the voice's faint crackle in an "s" into audible static.
+- VoxCPM2 speaks the whole script as one take (a line with a delivery note is its own take, and a script over 700 words splits), then sets the silence at each blank line and `[pause]` mark. A failing take is spoken again by beats, then by sentences.
 - VoxCPM2 phrase spans are per sentence.
 - The pitch-swing check runs per sentence and skips questions, sentences under 0.8 s of voicing and octave errors.
 - `narration.md` covers punctuating a script for the ear, with before-and-after examples of where a spoken sentence breathes.
 - How long each punctuation mark pauses is documented per engine, measured on VoxCPM2 and Kokoro. A script for text to speech is written after reading the engine's guide.
 - `speak --review` flags a missing breath after an opening word, sentences of 9 words or more with no breath, and with VoxCPM2 a question without its own line and delivery note.
-- `narration.md` lists the devices spoken narration uses, and the VoxCPM2 guide states what makes a read flat or expressive.
-- The VoxCPM2 guide states how delivery notes behave, with an example of a script directed where it turns.
+- `narration.md` lists the devices spoken narration uses.
+- The VoxCPM2 guide states how delivery notes behave and what makes a read flat or expressive, with a directed example.
+- `--reroll`: a fresh take that passes as well as the earlier one replaces it.
+- `speak`'s `ok ?` lines name the part number `--reroll` takes.
 
 ### Fixed
 
@@ -144,7 +149,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Master MP4 and `-compressed.mp4` copy.
 - `doctor`, `version` and `update` commands.
 
-[unreleased]: https://github.com/farhan-syah/motion-video-skill/compare/v1.3.0...HEAD
+[unreleased]: https://github.com/farhan-syah/motion-video-skill/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/farhan-syah/motion-video-skill/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/farhan-syah/motion-video-skill/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/farhan-syah/motion-video-skill/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/farhan-syah/motion-video-skill/compare/v1.0.0...v1.1.0
