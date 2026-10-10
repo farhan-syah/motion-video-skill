@@ -287,8 +287,9 @@
         spans[k].classList.toggle('said', k <= current);
         spans[k].classList.toggle('on', k === current);
       });
-      // A short pop as each line lands.
-      tr.el.style.setProperty('--pop', String(clamp((t - line.from) / 0.14)));
+      // A short pop as each line lands. A line already showing at video time 0 opens the video at rest: frame 0 is
+      // the thumbnail.
+      tr.el.style.setProperty('--pop', String(line.from <= 0 ? 1 : clamp((t - line.from) / 0.14)));
     }
   }
 

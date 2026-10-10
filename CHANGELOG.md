@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `check` no longer crashes on text over a `color-mix()` fill, such as the default card. It reads every computed color as sRGB.
 - `render --scene` on a one-scene video runs `audit` and writes `out/sheet.png`, as a render of the whole video does.
 - `check` no longer reports caption words in a `.hud` as screen text that drifts with the camera. It matched text across frames by its place in the page, and each caption line replaces its words, so it compared different words, some mid-pop. A caption track is one box now, measured by the block that holds it, and every text element keeps its own track across frames.
+- A caption line that shows at video time 0 opens at rest, so frame 0, the thumbnail, never shows it dim mid-pop. A project made earlier keeps its own `motion.js`: copy the template's over it.
 
 ## [1.4.1] - 2026-09-27
 
