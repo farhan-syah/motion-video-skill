@@ -7,6 +7,7 @@
 Usage:
   node scripts/dev/render-sounds.mjs <dir>
   uv run scripts/dev/sound-review.py <dir> [--no-model]
+  blazr sound-review <dir> [--no-model]   (the same review, with no uv or PyTorch)
 
 Numeric limits (every rendered form):
   sharpness   DIN 45692-style, loudest 100 ms, acum. Fail above 2.6: the sound reads as harsh.

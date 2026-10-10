@@ -282,7 +282,7 @@ export const SOUNDS = {
 };
 
 // Intent tags describe the visible event. The policy reads this table for every effect.
-//   says    - what a listener names the sound. The developer review (scripts/dev/sound-review.py) checks that an
+//   says    - what a listener names the sound. The developer review (`blazr sound-review`) checks that an
 //             audio-text model hears it as that.
 //   space   - share sent to the room (0 = bone dry). Mechanical UI stays dry; physical and cinematic sounds breathe.
 //   feather - onset fade in ms. Noisy textures ease in instead of starting on a hard edge; clicks keep their snap.

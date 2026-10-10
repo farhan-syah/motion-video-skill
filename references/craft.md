@@ -52,7 +52,7 @@ Recipes live in `scripts/lib/sound-catalog.mjs`, synthesis primitives and materi
 
 ```
 node scripts/dev/render-sounds.mjs /tmp/sound-review
-uv run scripts/dev/sound-review.py /tmp/sound-review
+blazr sound-review /tmp/sound-review
 ```
 
 It renders every form a video can produce (variants, both pitch ends, both span ends, every material, a minor key) and checks each:
@@ -65,7 +65,7 @@ It renders every form a video can produce (variants, both pitch ends, both span 
 | True peak                  | −1 dBTP                     | Clipping                                                                                             |
 | Recognizability            | warns above rank 10         | An audio-text model (LAION CLAP) no longer hears the sound as its `says` description in `SOUND_META` |
 
-It exits 1 on any failing limit. Fix every failure and warning before committing a recipe. `--no-model` skips recognizability. The review needs `uv`, and its first run downloads PyTorch and the model (several GB). The video pipeline stays Node-only.
+It exits 1 on any failing limit. Fix every failure and warning before committing a recipe. `--no-model` skips recognizability. The review needs `blazr` (`cargo install blazr --locked --features audio`), and its first run downloads the CLAP model. `scripts/dev/sound-review.py` runs the same review through `uv`. The video pipeline stays Node-only.
 
 ## Visual review
 

@@ -16,7 +16,8 @@ Commands:
                                  adds. Without --check: pull it and reinstall the dependencies. Only this command uses
                                  the network for updates, and only when run.
   doctor [DIR]                   Sweep before directing: CPU, memory, GPU drawing and encoding, tools, speech runtime
-                                 and models, the configured TTS, and the media and documents in DIR (default: here).
+                                 (blazr or the skill's own) and models, the configured TTS, and the media and documents in
+                                 DIR (default: here).
   init <dir>                     Create a project: direction.md, video.json, base.css, ui.css, world.css,
                                  atmosphere.css, icons.js, motion.js, fonts/, scenes/01-hook.html.
   lib NAME ...                   Copy a browser library into ./lib/ and print how to load it.
@@ -42,6 +43,7 @@ Commands:
                                  design with --voice "(description)", cloning with --reference; NVIDIA GPU, 8 GB);
                                  --model runs a Hugging Face TTS model; --engine kokoro runs Kokoro (local, English).
                                  The default is the best engine here: VoxCPM2 with its GPU, else Kokoro.
+                                 Runs in blazr when installed, else in the skill's own runner.
                                  "tts" in ~/.config/motion-video/config.json sets defaults. Every take is heard
                                  back with Whisper (--language sets its language). VoxCPM2 designs the voice once
                                  (<out>.voice.wav) and speaks the whole script as one take in the --style delivery
@@ -51,7 +53,8 @@ Commands:
   transcribe [FILE ...] [--model M] [--language L] [--script TXT]
                                  Word-level timestamps for narration, from a local Whisper model. With no FILE: the
                                  manifest's voiceover and every scene audio. Writes out/voice/<name>.words.json and
-                                 prints each word at its video time. Installs the speech runtime once, on first use.
+                                 prints each word at its video time. Runs in blazr when installed, else installs the speech
+                                 runtime once, on first use.
   footage FILE [--name N] [--from S] [--to S] [--fps F] [--width W]
                                  Extract a video clip into assets/N/ as frames and print the <img data-frames> tag.
                                  Defaults: N from the file name, the whole clip, the manifest fps and width.

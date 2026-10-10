@@ -139,7 +139,8 @@ The user's own recordings never pass through it.
 1. **Transcribe:** `transcribe` prints each word at its video time (local Whisper). With no file named, it reads the manifest's narration and writes `out/voice/words.json`, the video timeline captions read, plus `out/voice/<name>.words.json` per narration file. With a file named, it writes only `out/voice/<name>.words.json`.
    - With a script (`voiceover.script`, a scene's `script`, or `--script`), the script's words take the recognized times.
    - A voiceover longer than the scenes is still read, with the overrun printed.
-   - The first run installs the speech runtime (about 500 MB).
+   - `transcribe` runs in `blazr` when installed. Otherwise the first run installs the speech runtime (about 500 MB).
+   - `blazr` loads Whisper safetensors (`openai/whisper-base`, `openai/whisper-small`) and downloads a missing one on first use. A model with ONNX or `.bin` weights only makes `blazr` exit 3, and the skill's own runner takes over.
 2. **Plan to it:** in `direction.md`, give each beat the words it plays under. Place cuts in pauses between phrases.
 3. **Time to it:** set each entrance's `--t` from the word times. A line lands about 0.2 s before its first word, a verb moment on its word.
 4. **Mark it:** give every on-screen line that repeats the narration `data-say`, or `data-say="the spoken phrase"` when the text differs. `check` fails a line that is off screen while its words are spoken. It warns when one appears late or leaves early.

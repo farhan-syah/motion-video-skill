@@ -11,11 +11,11 @@
 
 ## Pick an engine
 
-With no engine flag or config, `speak` picks the best engine this machine runs: VoxCPM2 when an NVIDIA GPU with 8 GB and `uv` are here, else Kokoro. `doctor` names it on its `tts default` line.
+With no engine flag or config, `speak` picks the best engine this machine runs: VoxCPM2 when an NVIDIA GPU with 8 GB and a CUDA `blazr` or `uv` are here, else Kokoro. `doctor` names it on its `tts default` line.
 
 | Language       | Machine                          | Engine                                                                                                        |
 | -------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Any of 30      | NVIDIA GPU with 8 GB, and `uv`   | VoxCPM2, the default there                                                                                    |
+| Any of 30      | NVIDIA GPU with 8 GB, and blazr with CUDA or `uv` | VoxCPM2, the default there                                                                                    |
 | English        | Any, CPU only included           | Kokoro, the default without that GPU                                                                          |
 | The model's    | Any, CPU only included, and `uv` | A Hugging Face model whose license allows the video's use                                                     |
 | Any            | Any                              | The user's recording, or their own TTS through `--command`. Both beat a generated voice the user never heard. |

@@ -1,9 +1,9 @@
 # VoxCPM2
 
-OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description or cloned from a recording, 48 kHz. `speak --engine voxcpm`, the default on a machine with an NVIDIA GPU of 8 GB and `uv`.
+OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description or cloned from a recording, 48 kHz. `speak --engine voxcpm`, the default on a machine with an NVIDIA GPU of 8 GB and `uv`, or a CUDA `blazr`.
 
 - **Languages:** Arabic, Burmese, Chinese, Danish, Dutch, English, Finnish, French, German, Greek, Hebrew, Hindi, Indonesian, Italian, Japanese, Khmer, Korean, Lao, Malay, Norwegian, Polish, Portuguese, Russian, Spanish, Swahili, Swedish, Tagalog, Thai, Turkish, Vietnamese. Also 9 Chinese dialects, Cantonese among them.
-- **First run:** `uv` builds a Python environment, and a 4.7 GB model downloads unless a checkpoint is on disk. `--device cpu` works, very slowly.
+- **First run:** in a CUDA `blazr` (`cargo install blazr --locked --features audio,cuda`), the 4.7 GB model downloads unless a checkpoint is on disk, and `uv` is not needed. In the skill's own runner, `uv` builds a Python environment first. Without CUDA, `blazr` exits 3 for VoxCPM2 on a GPU, and the skill's runner takes over. `--device cpu` works, very slowly.
 
 ## How `speak` uses it
 
