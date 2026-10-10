@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { SR, decode } from './beats.mjs';
-import { dynamics, recipe, soundFile } from './sfx.mjs';
+import { accentTimes, cueSpan, dynamics, recipe, soundFile, soundWindow } from './sfx.mjs';
 
 test('a slide pans the way it travels, and stays centered when it barely moves sideways', () => {
   assert.equal(dynamics('swoosh', { dx: 300, distance: 320, moveDur: 0.4, speed: 800 }).dir, 1);
@@ -34,4 +34,28 @@ test('variants differ in more than pitch, and each renders its own file', () => 
   const files = [0, 1, 2, 3].map((v) => soundFile('pop', { variant: v }));
   assert.equal(new Set(files).size, 4);
   assert.throws(() => soundFile('pop', { variant: 1.5 }), /must be 0-3/);
+});
+
+test('a sound window spans the first 80-300 ms of the clip', () => {
+  assert.deepEqual(soundWindow(1, 0.05), [1, 1.08]);
+  assert.deepEqual(soundWindow(1, 0.2), [1, 1.2]);
+  assert.deepEqual(soundWindow(1, 2), [1, 1.3]);
+  assert.deepEqual(soundWindow(1, undefined), [1, 1.3]);
+});
+
+test('a cue span carries the lead-in its clip is placed with', () => {
+  const end = cueSpan({ sound: 'riser', anchor: 'end' });
+  assert.equal(end.lead, recipe('riser').d);
+  assert.equal(end.d, end.hit);
+  assert.equal(cueSpan({ sound: 'riser', anchor: 'start' }).lead, 0);
+  const one = recipe('pop', {}).d;
+  const group = cueSpan({ sound: 'pop', params: { hits: [0, 0.1, 0.25] } });
+  assert.equal(group.hit, one);
+  assert.ok(Math.abs(group.d - (0.25 + one)) < 1e-9, 'a composite lasts to its last hit plus one sound');
+});
+
+test('accents shift with their cue', () => {
+  const c = { at: 1100, impact: 1000, accentBoxes: [{ at: 1000 }, { at: 1200 }] };
+  assert.deepEqual(accentTimes(c), [1100, 1300]);
+  assert.deepEqual(accentTimes({ at: 500 }), []);
 });

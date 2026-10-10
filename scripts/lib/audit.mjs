@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { APPEAR } from './sound-catalog.mjs';
 import { HOP, SR, decode, features, fft } from './beats.mjs';
 import { cueSoundErrors, soundProfileErrors } from './sound-policy.mjs';
+import { soundWindow } from './sfx.mjs';
 
 // Measures sound-to-motion sync and checks material and sound shape on a rendered video.
 // Audio events come from spectral-flux onsets. Visual events come from frame differences inside each cue's element box.
@@ -319,10 +320,9 @@ export async function auditVideo(cueLog) {
     } else if (r.onsetMissing && !stem) {
       r.notes.push('No separate onset (another sound is still ringing), but the source is present in the mix.');
     }
-    // Masking: the effect's level against the whole mix over its first 300 ms. More than 12 dB under, speech buries it.
+    // Masking: the effect's level against the whole mix over its sound window. More than 12 dB under, speech buries it.
     if (stem && r.verdict !== 'fail') {
-      const a = r.start * SR;
-      const b = (r.start + Math.min(0.3, Math.max(0.08, r.d ?? 0.3))) * SR;
+      const [a, b] = soundWindow(r.start, r.d).map((s) => s * SR);
       const under = levelDb(samples, a, b) - (levelDb(stem, a, b) + stemGain);
       if (under > 12) {
         r.verdict = 'warn';

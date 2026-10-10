@@ -268,11 +268,40 @@ export function cueSound(c, { palette = 'synth', key = DEFAULT_KEY } = {}) {
   const p = c.params ?? {};
   if (c.src) return srcSound(c.sound, c.src);
   const material = materialFor(c, palette);
-  if (p.hits?.length > 1) {
-    const r = recipe(c.sound, {}, { material, key });
-    return { file: compositeFile(c.sound, p.hits, { pitch: p.pitch, rotate: c.variant ?? 0, material, key }), d: p.hits[p.hits.length - 1] + r.d };
+  const { d } = cueSpan(c, null, { palette, key });
+  if (p.hits?.length > 1) return { file: compositeFile(c.sound, p.hits, { pitch: p.pitch, rotate: c.variant ?? 0, material, key }), d };
+  return { file: soundFile(c.sound, { variant: c.variant ?? 0, dur: p.dur, pitch: p.pitch, bright: p.bright, dir: p.dir, crest: p.crest, material, key }), d };
+}
+
+// A cue's clip timing without rendering it: lead (seconds from the clip's start to its event), d (clip length) and
+// hit (length of one accent's sound, or of the whole clip for a single sound). snd: the cue's rendered sound, when known.
+// A data-sfx-src cue reads its file for the peak and length, so c.src must be a resolved path.
+export function cueSpan(c, snd = null, { palette = 'synth', key = DEFAULT_KEY } = {}) {
+  const p = c.params ?? {};
+  if (c.src) {
+    const s = snd ?? srcSound(c.sound, c.src);
+    // A user file has no recipe: its own loudest moment is its peak.
+    return { lead: { peak: s.peak, end: s.d }[c.anchor] ?? 0, d: s.d, hit: s.d };
   }
-  return { file: soundFile(c.sound, { variant: c.variant ?? 0, dur: p.dur, pitch: p.pitch, bright: p.bright, dir: p.dir, crest: p.crest, material, key }), d: recipe(c.sound, p, { material, key }).d };
+  const lead = soundLead(c.sound, c.anchor, p);
+  const material = materialFor(c, palette);
+  if (p.hits?.length > 1) {
+    const hit = recipe(c.sound, {}, { material, key }).d;
+    return { lead, d: p.hits[p.hits.length - 1] + hit, hit };
+  }
+  const d = recipe(c.sound, p, { material, key }).d;
+  return { lead, d, hit: d };
+}
+
+// Scene times (ms) of a container cue's accents, shifted with the cue when data-sfx-at or an offset moves it.
+export function accentTimes(c) {
+  return c.accentBoxes ? c.accentBoxes.map((a) => a.at + (c.at - c.impact)) : [];
+}
+
+// The stretch of a placed sound that must reach the ear, in seconds: its first 80-300 ms from the clip's start
+// (the event minus its lead-in). `audit` measures masking by the voice over it. `check` keeps words out of it.
+export function soundWindow(start, d) {
+  return [start, start + Math.min(0.3, Math.max(0.08, d ?? 0.3))];
 }
 
 // Converts page cues into placed clips: { file, at (video seconds), volume }.
@@ -288,8 +317,7 @@ export function placeCues(cues, sceneStart, sceneDuration, opts = {}) {
     const params = c.params ?? {};
     const snd = cueSound(c, opts);
     const { file: sourceFile, d } = snd;
-    // A user file has no recipe: its own loudest moment is its peak.
-    const lead = c.src ? ({ peak: snd.peak, end: d }[c.anchor] ?? 0) : soundLead(c.sound, c.anchor, params);
+    const { lead } = cueSpan(c, snd, opts);
     const start = sceneStart + event - lead;
     let file = sourceFile;
     if (start < 0) {
@@ -316,7 +344,7 @@ export function placeCues(cues, sceneStart, sceneDuration, opts = {}) {
       event: sceneStart + event,
       box: c.box ?? null,
       // Container cues: each child's landing and box, in video time, so the audit judges every accent.
-      accents: c.accentBoxes ? c.accentBoxes.map((a) => ({ box: a.box, event: sceneStart + (a.at + (c.at - c.impact)) / 1000 })) : null,
+      accents: c.accentBoxes ? accentTimes(c).map((at, k) => ({ box: c.accentBoxes[k].box, event: sceneStart + at / 1000 })) : null,
     });
   }
   return out.sort((a, b) => a.at - b.at);

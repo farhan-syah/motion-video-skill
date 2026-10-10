@@ -167,6 +167,6 @@ A word-synced caption track: `<div class="captions" data-captions="../out/voice/
 - **In `check`:** `data-say` lines are held to their words. A missing transcript fails with the command to run.
 - **Round trip:** after `render`, run `transcribe out/video.mp4 --script assets/voiceover.txt`. Compare `heard` in its words file with the script. A mismatch shows a mispronounced or cut-off word, or a recognizer's spelling of a name. `transcribe` drops words heard in digital silence, which a recognizer can invent after the last line.
 - **Effects under speech:** the voice leads. Use an effect only for a reason the voice does not give: a transition, the payoff. At most 2 in a scene, each in a pause.
-  - `check` warns on an effect over a word and names the next pause. It also warns on more than 2 in a scene.
-  - `audit` judges effects on their own stem (`out/voice/effects.wav`). It warns when the voice masks one by more than 12 dB.
+  - `check` warns when a cue's sound, lead-in included, overlaps a word, by timing only. It tests each cue, typing and each container accent included, over the same window `audit` measures, and names the next pause. It also warns on more than 2 in a scene.
+  - Only `audit` measures whether the voice masks a cue by level. It judges effects on their own stem (`out/voice/effects.wav`) and warns when the voice masks one by more than 12 dB.
 - **Listen:** when audio playback is available, listen once through. Report when it was not.

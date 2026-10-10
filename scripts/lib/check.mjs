@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { openScene } from './browser.mjs';
-import { SOUNDS, collectCues, measureImpacts } from './sfx.mjs';
+import { SOUNDS, accentTimes, collectCues, cueSpan, measureImpacts, soundWindow } from './sfx.mjs';
 import { cueSoundErrors } from './sound-policy.mjs';
 
 // Thresholds. Each one traces to a source in references/craft.md.
@@ -739,10 +739,17 @@ export async function checkScene(browser, m, scene, carry = null) {
       const { words } = spokenWords(m);
       if (words.length) {
         if (sounding.length > 2) add('warn', null, `${sounding.length} sound cues under narration in one scene (${sounding.map((c) => c.sound).join(', ')}). Under a voice, effects distract: keep at most 2, each with a clear reason.`, 'Keep the one or two that mark what the voice does not say (a transition, the payoff), and drop the rest.');
-        for (const c of sounding) {
-          const t = scene.start + c.at / 1000;
-          // The hit (its first 120 ms) must clear the words. A ring-out that fades under the next word is fine.
-          const over = words.find((w) => w.start < t + 0.12 && w.end > t);
+        // Every placed sound, typing and each container accent included, keeps its sound window (lead-in plus the
+        // first 80-300 ms, the stretch `audit` measures for masking) clear of the words. A ring-out under the next word is fine.
+        for (const c of cueList) {
+          if (c.problem || !SOUNDS[c.sound] || c.volume === 0 || c.at < 0 || c.at >= dur) continue;
+          const src = c.src && resolve(dirname(scene.file), c.src);
+          if (src && !existsSync(src)) continue;
+          const { lead, d, hit } = cueSpan(src ? { ...c, src } : c, null, { palette: m.sound.palette });
+          const start = (at) => Math.max(0, scene.start + at / 1000 - lead);
+          const windows = [soundWindow(start(c.at), d), ...accentTimes(c).map((at) => soundWindow(start(at), hit))];
+          let over = null;
+          for (const [a, b] of windows) over ??= words.find((w) => w.start < b && w.end > a);
           if (!over) continue;
           // The next pause of 0.3 s or more after the cue, where the effect fits.
           let gap = null;
