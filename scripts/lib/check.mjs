@@ -350,14 +350,21 @@ function openingCoverage() {
   return cells.reduce((a, b) => a + b, 0) / cells.length;
 }
 
-// Runs in the page. Boxes of the screen text: the headline ([data-headline], else the first h1, h2, .hero or .title)
-// and every text element in a .hud. Text inside [data-world] or a 3D .viewport belongs to the world and moves with the camera.
-// settled: no entrance, exit or beat animation runs on the element or an ancestor. Animations that span 90% of the scene
-// or more are camera moves, so they count as drift, not as an entrance.
+// Runs in the page. Boxes of the screen text: the headline ([data-headline], else the first h1, h2, .hero or .title),
+// every text element in a .hud, and each caption track. Text inside [data-world] or a 3D .viewport belongs to the world
+// and moves with the camera. settled: no entrance, exit or beat animation runs on the element or an ancestor. Animations
+// that span 90% of the scene or more are camera moves, so they count as drift, not as an entrance.
+// key: the element's identity across seeks, so a line that types in or a word that leaves never shifts another's track.
 function readingBoxes(sceneMs) {
+  const ids = (window.__readingIds ??= new WeakMap());
+  const keyOf = (el) => {
+    if (!ids.has(el)) ids.set(el, (window.__readingNext = (window.__readingNext ?? 0) + 1));
+    return ids.get(el);
+  };
   // Only a headline marked data-headline is a chapter headline held to one slot. Statements move with each beat.
   const head = document.querySelector('[data-headline]');
-  const hudText = [...document.querySelectorAll('.hud *')].filter((e) => [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()));
+  // Caption words are rebuilt for every line and pop in on their own, so the track is measured as one box instead.
+  const hudText = [...document.querySelectorAll('.hud *')].filter((e) => !e.closest('[data-captions]') && [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()));
   const els = [...new Set([head, ...hudText].filter(Boolean))].filter((e) => !hudText.some((h) => h !== e && e.contains(h) && e !== head));
   // Type that changes its own width, weight or size on purpose is a type device, not camera drift.
   const FONT = ['fontStretch', 'fontWeight', 'fontVariationSettings', 'fontSize', 'letterSpacing'];
@@ -375,10 +382,10 @@ function readingBoxes(sceneMs) {
     }
     return false;
   };
-  return els.map((el, key) => {
+  const boxes = els.map((el) => {
     const r = el.getBoundingClientRect();
     return {
-      key,
+      key: keyOf(el),
       headline: el === head,
       hud: !!el.closest('.hud'),
       world: !!el.closest('[data-world], .viewport'),
@@ -391,6 +398,27 @@ function readingBoxes(sceneMs) {
       text: el.innerText.trim().replace(/\s+/g, ' ').slice(0, 40),
     };
   });
+  // A caption track's own box grows and shrinks with each line. It sits at a fixed place in its containing block,
+  // so that block's box moves exactly as the camera moves the track.
+  for (const el of document.querySelectorAll('[data-captions]')) {
+    const block = el.offsetParent;
+    if (!block) continue;
+    const r = block.getBoundingClientRect();
+    boxes.push({
+      key: keyOf(el),
+      headline: false,
+      hud: !!el.closest('.hud'),
+      world: !!el.closest('[data-world], .viewport'),
+      settled: !busy(el),
+      typeDevice: false,
+      l: r.left,
+      t: r.top,
+      w: r.width,
+      h: r.height,
+      text: 'caption track',
+    });
+  }
+  return boxes;
 }
 
 function hasSeek() {
@@ -419,6 +447,18 @@ function visibleEntrances() {
     out.push({ text, timings });
   }
   return out;
+}
+
+// How far a run of boxes of one text element strays from its first: the largest move of its center in px, and the
+// largest change of its width as a share of the first width.
+export function screenDrift(boxes) {
+  const [a] = boxes;
+  const cx = (b) => b.l + b.w / 2;
+  const cy = (b) => b.t + b.h / 2;
+  return {
+    move: Math.max(...boxes.map((b) => Math.hypot(cx(b) - cx(a), cy(b) - cy(a)))),
+    grow: Math.max(...boxes.map((b) => Math.abs(b.w / a.w - 1))),
+  };
 }
 
 // Share of an animation played at its local time (0-1), from its computed timing, so --in-dur, --t and --i stagger
@@ -824,10 +864,7 @@ export async function checkScene(browser, m, scene, carry = null) {
     for (const bs of tracks.values()) {
       if (bs.length < 2) continue;
       const [a] = bs;
-      const cx = (b) => b.l + b.w / 2;
-      const cy = (b) => b.t + b.h / 2;
-      const move = Math.max(...bs.map((b) => Math.hypot(cx(b) - cx(a), cy(b) - cy(a))));
-      const grow = Math.max(...bs.map((b) => Math.abs(b.w / a.w - 1)));
+      const { move, grow } = screenDrift(bs);
       if (move > short * 0.005 || grow > 0.015) {
         add('warn', a.at, `Screen text "${a.text}" drifts ${move.toFixed(0)}px and scales ${(grow * 100).toFixed(1)}% while it is on screen. It moves with the camera, so it wobbles instead of reading as a fixed title.`, 'Move it into the fixed .hud layer, out of the moving wrapper. If it is part of the world (a label on a prop, a logo in the scene), mark its wrapper data-world.');
       }
