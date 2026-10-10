@@ -75,7 +75,7 @@ The story shape sets the order of beats. Every shape keeps three anchors:
 
 - **Beats:** pacing and compositions: `concepts.md`.
 - **Orient first:** the first 2–3 s name the subject, on screen and in the first spoken line. A viewer who scrolled in knows what this is and why to watch before any scenario starts ("So you open the app…" assumes context the viewer lacks). A question hook still names its subject.
-- **Thumbnail frame:** frame 0 is the thumbnail on most platforms. It shows the subject or title in display type, readable as a still at phone size. Never a blank, a half-built frame, or chrome alone.
+- **Thumbnail frame:** frame 0 is the thumbnail on most platforms. It shows the subject or title in display type, readable as a still at phone size. Never a blank, a half-built frame, or chrome alone. Start scene 1's hero at `--t: calc(-1 * var(--dur-in))`, so it rests at frame 0. `check` warns when a visible element is still entering there.
 - **Logo:** on the end card. If the brief asks to show the logo, also reveal it as a lockup right after the hook. Never open on it.
 - **Music cuts:** snap every cut to a downbeat from `out/beats.json`. Put the payoff on the biggest energy hit.
 - **Narration cuts:** the words set the clock. Size each beat to its phrases and cut in the pauses. A timed script sets the beats to its times.

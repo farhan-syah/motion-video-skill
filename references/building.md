@@ -338,7 +338,8 @@ Voiceover, text to speech, word timing, caption tracks and sync checks: `narrati
 - **Upright faces:** `.stand` stands a flat element up on the plane. `.laptop` is a base plus a hinged lid, with `.lid > .screen` holding rebuilt UI.
 - **Aiming 2D at 3D:** `probe "<selector>" <T>` prints an element's on-screen center and box, for cursor paths and connector endpoints.
 - **`translate` belongs to `.m`.** Entrances animate `translate`, `scale` and `opacity`. Position a `.m` element with `left/top`, `inset`, margins, grid or a positioned wrapper.
-- **Blank cuts:** if every entrance starts at `--t` ≥ 0, the first frame is bare background. Start the hero at a negative `--t` such as `-0.2s`.
+- **Blank cuts:** if every entrance starts at `--t` ≥ 0, the first frame is bare background. In later scenes, start the hero at a negative `--t` such as `-0.2s`, so the cut lands mid-entrance.
+- **Thumbnail frame:** frame 0 of scene 1 is the thumbnail. Start its hero a full entrance early, `--t: calc(-1 * var(--dur-in))` (`--in-dur` when set), so it rests at frame 0.
 - **Text entrances:** `rise`, `reveal`, `fade`, `blur` or `zoom`. `pop`, `pop-in` and `drop-in` scale from near zero: props, icons and badges only.
 - **UI texture:** small real UI (in a device, thumbnail or miniature) can stay at true size. A callout, headline or caption must carry its meaning. Mark its container `data-texture`: `check` then skips size, reading time, contrast, overlap and safe area inside it. Numbers and words the viewer must read never go in texture. Pin them in a callout, or push in until they pass.
 - **Deliberate overlap:** a stamp or badge over text needs `data-overlap-ok`, or `check` reports it.

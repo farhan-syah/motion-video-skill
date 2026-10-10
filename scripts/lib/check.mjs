@@ -397,6 +397,38 @@ function hasSeek() {
   return typeof window.__video?.seek === 'function';
 }
 
+// Runs in the page. Every visible .m element with the computed timing of each animation on it, read at the current seek.
+function visibleEntrances() {
+  const vw = innerWidth;
+  const vh = innerHeight;
+  const out = [];
+  for (const el of document.querySelectorAll('.m')) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1 || r.right <= 0 || r.bottom <= 0 || r.left >= vw || r.top >= vh) continue;
+    let o = 1;
+    for (let e = el; e && o > 0; e = e.parentElement) {
+      const s = getComputedStyle(e);
+      o = s.display === 'none' || s.visibility === 'hidden' ? 0 : o * Number(s.opacity);
+    }
+    if (o < 0.05) continue;
+    const timings = el.getAnimations().map((a) => {
+      const { delay, activeDuration, localTime } = a.effect.getComputedTiming();
+      return { delay, activeDuration, localTime };
+    });
+    const text = el.textContent.trim().replace(/\s+/g, ' ').slice(0, 40) || `${el.localName}${el.classList.length ? `.${[...el.classList].join('.')}` : ''}`;
+    out.push({ text, timings });
+  }
+  return out;
+}
+
+// Share of an animation played at its local time (0-1), from its computed timing, so --in-dur, --t and --i stagger
+// all count. null when it is not running: not started, finished, or ambient (infinite, or 90% of the scene or more).
+export function entranceProgress({ delay, activeDuration, localTime }, sceneMs) {
+  if (localTime == null || !Number.isFinite(activeDuration) || activeDuration <= 0 || activeDuration >= sceneMs * 0.9) return null;
+  const p = (localTime - delay) / activeDuration;
+  return p > 0 && p < 1 ? p : null;
+}
+
 const lum = (rgb) => {
   const c = rgb.map((v) => {
     v /= 255;
@@ -764,7 +796,19 @@ export async function checkScene(browser, m, scene, carry = null) {
     const coverage = await sc.page.evaluate(openingCoverage);
     // The end card is exempt: a small lockup on a calm frame is its job.
     const endCard = m.scenes.length > 1 && scene.index === m.scenes.length;
-    if (coverage < 0.03 && !endCard) add('warn', 400, `The scene opens near-empty: shapes cover ${(coverage * 100).toFixed(1)}% of the frame at 0.4 s, so only text and chrome show.`, "Put the motif on screen at the cut: start its entrance at a negative --t, or match-cut it from the previous scene.");
+    // The opening scene's frame 0 is the thumbnail, so its motif enters a full entrance early. Later scenes cut mid-entrance.
+    const motifFix = scene.index === 1 ? 'Put the motif on screen at the cut: start its entrance at --t: calc(-1 * var(--dur-in)), so it rests at frame 0, the thumbnail.' : 'Put the motif on screen at the cut: start its entrance at a negative --t, or match-cut it from the previous scene.';
+    if (coverage < 0.03 && !endCard) add('warn', 400, `The scene opens near-empty: shapes cover ${(coverage * 100).toFixed(1)}% of the frame at 0.4 s, so only text and chrome show.`, motifFix);
+
+    // Frame 0 of the opening scene is the thumbnail. A visible element still entering there shows faded and offset.
+    if (scene.index === 1) {
+      await sc.seek(0);
+      for (const el of await sc.page.evaluate(visibleEntrances)) {
+        const running = el.timings.map((t) => entranceProgress(t, dur)).filter((p) => p != null);
+        if (!running.length) continue;
+        add('warn', 0, `Frame 0 is the thumbnail: "${el.text}" is ${Math.round(Math.min(...running) * 100)}% through its entrance.`, 'Start it at --t: calc(-1 * var(--dur-in)) (-0.8s by default), so it rests at frame 0.');
+      }
+    }
 
     // Screen text holds still once it has entered. The camera moves the world under it, never the reading layer.
     // World text ([data-world], .viewport) moves with the camera by design and is skipped.
