@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - The developer sound review runs in `blazr sound-review <dir> [--no-model]`, with no `uv` or PyTorch. `scripts/dev/sound-review.py` stays.
 - `building.md` says what `--out-t` counts: seconds from the scene's start, the clock `--t` uses. An exit still running at the cut is cut mid-way, since the next scene and the end card open on their own frame 0.
 - The workflow step that runs `init` says it writes a placeholder `scenes/01-hook.html` and a one-scene `video.json` to replace.
+- `narration.md` sends a doubtful name in a VoxCPM2 take to `--reroll` first, up to 3 times. A spoken form draws the whole part again, so it comes only when the re-rolls still miss the name.
 
 ### Fixed
 

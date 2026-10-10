@@ -125,7 +125,9 @@ The user's own recordings never pass through it.
 - **Stray pauses:** a pause over 0.45 s between two words with no punctuation between them is marked `ok ?`. A voice phrases by how it reads the grammar, so a word that can be a noun or a verb ("the support team calls each customer") can pull the pause to the wrong place.
   - Kokoro and other engines: a comma where the break belongs, or a rewording, sets it.
   - VoxCPM2: listen to it, and `--reroll` the part if it is heard. An edit to the text draws the whole part again, and the new take can pause somewhere else. Each stray pause counts against a take, so retries and re-rolls keep the take with fewer.
-- **`ok ?` without audio playback:** reword the line, or give the name a spoken form (`{written|spoken}`), then run `speak` again. The line is settled when both recognizers hear it as written. A VoxCPM2 stray pause or pitch peak gets `--reroll` instead: a reworded part is drawn again and can go wrong somewhere else.
+- **`ok ?` without audio playback:** fix the part, then run `speak` again. The line is settled when both recognizers hear it as written.
+  - Kokoro and other engines: reword the line, or give the name a spoken form (`{written|spoken}`).
+  - VoxCPM2: `--reroll` the part first, for a doubtful name as well as a stray pause or pitch peak. Re-roll it up to 3 times. A spoken form or a rewording draws the whole part again, and the new take can go wrong somewhere else. Give the name a spoken form only when the re-rolls still miss it.
 - **Delivery (VoxCPM2):** a part whose pitch peaks above 1.6 times the voice's usual pitch is marked `ok ?`: it can sound shouted or excited. Listen, then calm its note or re-roll it.
 
 - **Per engine:** VoxCPM2 checks each take and regenerates a failing one under a new seed, up to 3 tries. A take that fails every try is spoken again by beats, then by sentences. Other engines get one check of the whole file.
