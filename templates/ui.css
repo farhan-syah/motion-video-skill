@@ -16,7 +16,7 @@
 }
 /* Light frame (class="light" on <html>): a softer, slate-tinted shadow under surfaces. Colors stay in :root. */
 :root:where(.light) {
-  --lift:0 calc(var(--u) * 3) calc(var(--u) * 7) rgb(15 23 42 / 0.12), 0 calc(var(--u) * 0.3) calc(var(--u) * 0.8) rgb(15 23 42 / 0.06);
+  --lift: 0 calc(var(--u) * 3) calc(var(--u) * 7) rgb(15 23 42 / 0.12), 0 calc(var(--u) * 0.3) calc(var(--u) * 0.8) rgb(15 23 42 / 0.06);
 }
 
 /* Surfaces. */
