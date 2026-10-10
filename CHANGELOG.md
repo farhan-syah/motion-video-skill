@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `check` warns when a visible element in scene 1 is still entering at frame 0, the thumbnail, and names how far through its entrance it is. It reads each animation's computed timing, so a custom `--in-dur` and a stagger count.
 - `speak` warns when it designs a voice from an opening of fewer than 25 words: the reference is short and holds the voice loosely.
+- The setup notes say when `uv` is needed: only for the skill's Python runner, which runs VoxCPM2 without a CUDA `blazr` and `--model` voices with PyTorch-only weights.
 
 ### Changed
 
@@ -26,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - `cli.md` and `--help` match what `render` does: a render of the whole video, draft or not, runs `audit` and writes `out/sheet.png`, `out/thumbnail.png` and `out/stems/`. Only a non-draft render writes the compressed copy.
 - `SKILL.md` no longer sends a render's review to a second `audit` run: `render` already ran it. A sound-only fix needs `render` again.
+- `tts.md` no longer says every Hugging Face model needs `uv`. Only PyTorch-only weights do.
 - The near-empty-opening advice in `check` no longer pushes scene 1 to a mid-entrance frame 0.
 - `check` no longer crashes on text over a `color-mix()` fill, such as the default card. It reads every computed color as sRGB.
 - `render --scene` on a one-scene video runs `audit` and writes `out/sheet.png`, as a render of the whole video does.

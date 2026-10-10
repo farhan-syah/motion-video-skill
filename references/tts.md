@@ -17,7 +17,7 @@ With no engine flag or config, `speak` picks the best engine this machine runs: 
 | -------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | Any of 30      | NVIDIA GPU with 8 GB, and blazr with CUDA or `uv` | VoxCPM2, the default there                                                                                    |
 | English        | Any, CPU only included           | Kokoro, the default without that GPU                                                                          |
-| The model's    | Any, CPU only included, and `uv` | A Hugging Face model whose license allows the video's use                                                     |
+| The model's    | Any, CPU only included. `uv` only for PyTorch-only weights (`tts/huggingface.md`) | A Hugging Face model whose license allows the video's use                                                     |
 | Any            | Any                              | The user's recording, or their own TTS through `--command`. Both beat a generated voice the user never heard. |
 | No engine fits | Any                              | No narration. Ask for a recording, or carry the copy in on-screen text.                                       |
 
