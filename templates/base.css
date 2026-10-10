@@ -14,9 +14,18 @@
 }
 
 :root {
-  /* Palette: neutral placeholders, not a look. The frame is dark here and light with class="light" on <html>;
-     direction.md decides which. Replace every token with the palette in direction.md, sampled from the brand or
-     derived from the product's world. Keep text on --bg at 4.5:1 or better. */
+  /* Palette: write the chosen palette here once, dark or light. direction.md decides which. These are neutral
+     placeholders, not a look: replace every token with the palette in direction.md, sampled from the brand or
+     derived from the product's world. Keep text on --bg at 4.5:1 or better. A light frame also takes class="light"
+     on <html>, which switches grain and surface shadows, never colors. --on-accent lives in ui.css.
+     Neutral light palette, ready to paste over the dark values below:
+       --bg: #f5f5f7;
+       --bg-2: #ffffff;
+       --fg: #111318;
+       --muted: #5b6272;
+       --accent: #3b3d44;
+       --accent-2: #6d7079;
+       --accent-ink: color-mix(in oklab, var(--accent), black 28%); */
   --bg: #0f1012;
   --bg-2: #1b1c20;
   --fg: #f4f4f5;
@@ -54,16 +63,9 @@
   --bar: calc(var(--beat) * 4);
 }
 
-/* Light world: add class="light" to <html>. Grain turns dark and multiplies. */
-/* :where keeps this at the specificity of :root, so a scene's own :root { … } palette wins over these defaults. */
+/* Light frame: add class="light" to <html>. Grain turns dark and multiplies. The palette stays whatever :root holds. */
+/* :where keeps this at the specificity of :root, so a scene's own :root { … } wins over these defaults. */
 :root:where(.light) {
-  --bg: #f5f5f7;
-  --bg-2: #ffffff;
-  --fg: #111318;
-  --muted: #5b6272;
-  --accent: #3b3d44;
-  --accent-2: #6d7079;
-  --accent-ink: color-mix(in oklab, var(--accent), black 28%);
   --grain-blend: multiply;
   --grain-opacity: 0.05;
 }

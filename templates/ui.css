@@ -1,7 +1,11 @@
 /* motion-video UI kit: product-UI parts sized for video. Needs base.css. Restyle with tokens, keep the structure. */
 
 :root {
+  /* Kit palette: write it here once, dark or light, beside the palette in base.css. --surface derives from --bg-2,
+     so a light palette with --bg-2: #ffffff gives white cards. --on-accent is text on an accent fill: a dark frame
+     uses a light accent, so the text goes dark. For the light palette in base.css, paste --on-accent: #ffffff. */
   --surface: color-mix(in oklab, var(--bg-2), white 6%);
+  --on-accent: #0b0d12;
   --line: color-mix(in oklab, var(--fg), transparent 88%);
   --radius: calc(var(--u) * 2.2);
   --radius-sm: calc(var(--u) * 1.2);
@@ -9,13 +13,10 @@
   --ok: #15803d;
   --warn: #b45309;
   --bad: #b91c1c;
-  /* Text on an accent fill. Dark worlds use a light accent, so the text goes dark. */
-  --on-accent: #0b0d12;
 }
+/* Light frame (class="light" on <html>): a softer, slate-tinted shadow under surfaces. Colors stay in :root. */
 :root:where(.light) {
-  --on-accent: #ffffff;
-  --surface: #ffffff;
-  --lift: 0 calc(var(--u) * 3) calc(var(--u) * 7) rgb(15 23 42 / 0.12), 0 calc(var(--u) * 0.3) calc(var(--u) * 0.8) rgb(15 23 42 / 0.06);
+  --lift:0 calc(var(--u) * 3) calc(var(--u) * 7) rgb(15 23 42 / 0.12), 0 calc(var(--u) * 0.3) calc(var(--u) * 0.8) rgb(15 23 42 / 0.06);
 }
 
 /* Surfaces. */

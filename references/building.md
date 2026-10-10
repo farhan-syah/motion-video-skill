@@ -345,7 +345,7 @@ Voiceover, text to speech, word timing, caption tracks and sync checks: `narrati
 - **Deliberate overlap:** a stamp or badge over text needs `data-overlap-ok`, or `check` reports it.
 - **Connector lines:** `<path data-draw data-at data-dur [data-dash="8 10"]>` draws solid and dashed strokes. `--in:draw` is for solid strokes only. Drop `vector-effect: non-scaling-stroke` on drawn paths: dash lengths are in path units.
 - **Sounds on scripted motion:** a `data-sfx` on a `data-count` counter or `data-draw` path spans `data-at` to `data-at + data-dur`. A `ticker` then follows the count. `data-ease="linear"` counts at a steady rate.
-- **Light worlds:** `class="light"` on `<html>` switches the default palette, surfaces and grain. A scene's own `:root { … }` tokens still win.
+- **Light worlds:** the palette is whatever `:root` in `base.css` holds. Write the light palette there once (a neutral one waits in its comment). `class="light"` on `<html>` switches grain and surface shadows only. A scene's own `:root { … }` tokens still win.
 - **Avatars:** `.avatar.g1`–`.g6` gradients keep white initials at 4.5:1 or better.
 
 ## Render cost

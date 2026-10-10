@@ -5,7 +5,7 @@ Each entry lists what makes the style read as itself. All build from `base.css`,
 ## Launch keynote (Apple style)
 
 - **Typical layers:** the product turns in the world, and the phrase holds still in the `.hud` over it.
-- **Palette:** pure black `#000`, or the `light` world (`#f5f5f7`). One accent gradient from the brand's own colors, used on one word per scene.
+- **Palette:** pure black `#000`, or the light palette in `base.css`'s comment (`--bg: #f5f5f7`) with `class="light"`. One accent gradient from the brand's own colors, used on one word per scene.
 - **Type:** Inter 700–800, tracking −0.04em, huge. One phrase at a time, centered. Secondary copy at 40% opacity.
 - **Signature moves:**
   - Blur-to-sharp word reveals: `--in:blur`.
