@@ -20,6 +20,17 @@ const SMALL_GRACE = 600; // Text can pass below MIN_TEXT this long (ms) during a
 // Runs in the page. Returns every visible run of text with its box, effective opacity and size.
 function collectText(short) {
   const out = [];
+  // Computed colors keep their space (a color-mix() resolves to oklab()). Painting one pixel reads any of them back
+  // as sRGB [r, g, b, alpha].
+  const paint = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+  const srgb = (c) => {
+    paint.clearRect(0, 0, 1, 1);
+    paint.fillStyle = c;
+    paint.fillRect(0, 0, 1, 1);
+    const [r, g, b, a] = paint.getImageData(0, 0, 1, 1).data;
+    return [r, g, b, a / 255];
+  };
+  const rgba = (c) => `rgba(${srgb(c).join(', ')})`;
   // Hit testing skips pointer-events: none (a caption track, an overlay), which makes whatever lies under that
   // text read as covering it. Every element takes part in hit testing while the text is measured.
   const hitAll = document.createElement('style');
@@ -83,10 +94,10 @@ function collectText(short) {
       if (top.contains(el)) return null;
       if (overlapOk(top) || effOpacity(top) < 0.3) continue;
       const s = getComputedStyle(top);
-      const bgAlpha = Number((s.backgroundColor.match(/[\d.]+(?=\))/) || [s.backgroundColor.startsWith('rgba') ? 0 : 1])[0]);
+      const bgAlpha = srgb(s.backgroundColor)[3];
       // An SVG root is hit across its whole box. Only filled shapes inside it paint over text; strokes are thin.
       const filledShape = top instanceof SVGGeometryElement && s.fill !== 'none' && Number(s.fillOpacity) > 0.3;
-      const opaque = ['img', 'canvas', 'video'].includes(top.localName) || filledShape || s.backgroundImage !== 'none' || (s.backgroundColor !== 'transparent' && bgAlpha > 0.3);
+      const opaque = ['img', 'canvas', 'video'].includes(top.localName) || filledShape || s.backgroundImage !== 'none' || bgAlpha > 0.3;
       if (opaque) return top;
     }
     return null;
@@ -172,13 +183,13 @@ function collectText(short) {
     let plate = null;
     for (let e = el; e && e !== document.body; e = e.parentElement) {
       const es = getComputedStyle(e);
-      const bg = es.backgroundColor.match(/[\d.]+/g)?.map(Number);
+      const bg = srgb(es.backgroundColor);
       if (es.backgroundImage !== 'none') break;
-      if (!bg || (bg.length > 3 && bg[3] === 0)) continue;
+      if (bg[3] === 0) continue;
       const r = e.getBoundingClientRect();
       // The plate is the text's own element or an ancestor, so it fades with the text: their contrast holds through a
       // fade-in (a caption line's pop), and only the plate's own color alpha matters.
-      if ((bg.length < 4 || bg[3] >= 0.95) && r.left <= full.l + 1 && r.right >= full.r - 1 && r.top <= full.t + 1 && r.bottom >= full.b - 1) plate = es.backgroundColor;
+      if (bg[3] >= 0.95 && r.left <= full.l + 1 && r.right >= full.r - 1 && r.top <= full.t + 1 && r.bottom >= full.b - 1) plate = rgba(es.backgroundColor);
       break;
     }
     const text = texts.map((t) => t.textContent).join(' ').replace(/\s+/g, ' ').trim();
@@ -204,9 +215,9 @@ function collectText(short) {
       px: (parseFloat(cs.fontSize) * sy) / short,
       // Screen scale of the text from its transform chain: above 1 means a camera push or zoom enlarges it.
       scale: sy,
-      color: cs.color,
+      color: rgba(cs.color),
       // An outline stroke (a caption over footage) carries the contrast when the fill alone does not.
-      stroke: parseFloat(cs.webkitTextStrokeWidth) * sy >= 1 ? cs.webkitTextStrokeColor : null,
+      stroke: parseFloat(cs.webkitTextStrokeWidth) * sy >= 1 ? rgba(cs.webkitTextStrokeColor) : null,
       clipText: cs.backgroundClip === 'text' || cs.webkitBackgroundClip === 'text',
       family: cs.fontFamily.split(',')[0].trim().replace(/^["']|["']$/g, ''),
       overflow: el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1 ? ['hidden', 'clip', 'scroll', 'auto'].includes(cs.overflowX) || ['hidden', 'clip', 'scroll', 'auto'].includes(cs.overflowY) : false,
@@ -271,6 +282,14 @@ function fontFamilies() {
 // Text alone does not count: a headline over chrome is still an empty frame.
 // Full-frame layers (backgrounds, grids, grain) are skipped, since they are there in an empty frame too.
 function openingCoverage() {
+  // A color-mix() fill computes to oklab(): one painted pixel reads its alpha in any color space.
+  const paint = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+  const alpha = (c) => {
+    paint.clearRect(0, 0, 1, 1);
+    paint.fillStyle = c;
+    paint.fillRect(0, 0, 1, 1);
+    return paint.getImageData(0, 0, 1, 1).data[3];
+  };
   const W = 192;
   const H = 108;
   const cells = new Uint8Array(W * H);
@@ -311,7 +330,7 @@ function openingCoverage() {
     }
     if (r.width * r.height > vw * vh * 0.6) continue;
     const s = getComputedStyle(el);
-    const filled = (s.backgroundColor !== 'transparent' && !/rgba\([^)]*,\s*0\)/.test(s.backgroundColor)) || s.backgroundImage !== 'none';
+    const filled = alpha(s.backgroundColor) > 0 || s.backgroundImage !== 'none';
     const bordered = parseFloat(s.borderTopWidth) > 0 && s.borderTopStyle !== 'none';
     const media = ['img', 'svg', 'canvas', 'video'].includes(el.localName);
     // Display type is content: a beat that opens on giant words is not empty. Small labels and captions are chrome.
