@@ -23,8 +23,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- `cli.md` and `--help` match what `render` does: a render of the whole video, draft or not, runs `audit` and writes `out/sheet.png`, `out/thumbnail.png` and `out/stems/`. Only a non-draft render writes the compressed copy.
+- `SKILL.md` no longer sends a render's review to a second `audit` run: `render` already ran it. A sound-only fix needs `render` again.
 - The near-empty-opening advice in `check` no longer pushes scene 1 to a mid-entrance frame 0.
 - `check` no longer crashes on text over a `color-mix()` fill, such as the default card. It reads every computed color as sRGB.
+- `render --scene` on a one-scene video runs `audit` and writes `out/sheet.png`, as a render of the whole video does.
 
 ## [1.4.1] - 2026-09-27
 

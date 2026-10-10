@@ -26,7 +26,7 @@ Tool: `node <skill-dir>/scripts/video.mjs <command>`, run from the project direc
 6. **Build** the scenes per `references/building.md`. Rebuild reference designs as live HTML. Never animate a flat screenshot of a design you can rebuild.
 7. **Check each scene.** After writing or editing a scene, run `check --scene N`. Open its still sheet with Read and fix what fails `references/craft.md`. Fix every finding of a pass in one edit before running again. A warning stays only for a deliberate choice.
 8. **Render.** Run `render --draft` once every scene passes, and again after each fix. Run the full `render` once the draft passes review. With a `sound.bed`, compare the no-bed copy, or tell the user to.
-9. **Review.** Open `out/sheet.png` and, with effects, `out/audit.png`. Compare each cue's intent with its thumbnail. Fix each failing cue and false intent label, then render again. Listen to the mix when playback is available, and report when it was not.
+9. **Review.** `render` already ran `audit` and wrote `out/sheet.png` and, with effects, `out/audit.png`. Read its output and open both. Never run `audit` alone after a render. A sound-only fix needs `render` again: `audit` reads the `out/cues.json` that `render` writes. Compare each cue's intent with its thumbnail. Fix each failing cue and false intent label, then render again. Listen to the mix when playback is available, and report when it was not.
 10. **Deliver.** Open `out/thumbnail.png` (frame 0) and check it reads as a thumbnail. Report the master, the `-compressed.mp4` copy and the thumbnail.
 
 ## Non-negotiables

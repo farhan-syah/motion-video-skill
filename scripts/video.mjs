@@ -63,7 +63,10 @@ Commands:
   still [--scene NAME] [T ...]   Render frames at T seconds to out/stills/. With no T, write one contact sheet per scene.
   render [--scene NAME] [--draft] [--scale N] [--jobs N] [--force]
                                  Check (skipped when a clean check already covers these files), render to the
-                                 manifest "output", then run audit and write out/sheet.png. Exits 1 on a failing cue.
+                                 manifest "output". A whole-video render, draft or not, then runs audit (unless
+                                 "sfx": false) and writes out/sheet.png, out/thumbnail.png and out/stems/. Only a
+                                 non-draft render writes <output>-compressed.mp4. --scene skips all of these.
+                                 Exits 1 on a failing cue.
                                  --draft   half size, JPEG capture, fast encode.
                                  --scale 2 renders at twice the manifest size (1920x1080 -> 4K).
                                  --jobs N  parallel browser pages. Default: half the CPU threads, at most 8.
@@ -817,7 +820,7 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs }, op
     spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', output, '-frames:v', '1', thumb]);
     if (existsSync(thumb)) console.log(`wrote ${thumb} (frame 0, the thumbnail on most platforms)`);
   }
-  // A full render also writes a compressed copy next to the master, small enough for chat apps and social uploads.
+  // A non-draft render of the whole video also writes a compressed copy next to the master, small enough for chat apps and social uploads.
   if (!draft && output === m.output) {
     const { compressedCopy } = await import('./lib/encode.mjs');
     const small = output.replace(/(\.[^./]+)?$/, '-compressed.mp4');
@@ -1164,8 +1167,8 @@ async function main() {
     disableNvenc();
     await render(m, scenes, opts, opts);
   }
-  // A full render ends with its review: the sound audit and the contact sheet, so one command gives the verdict.
-  if (opts.scene) return 0;
+  // A render of the whole video, draft or not, ends with its review: the sound audit and the contact sheet, so one command gives the verdict.
+  if (scenes.length < m.scenes.length) return 0;
   const audited = m.sfx ? await audit(m) : 0;
   await sheet(m);
   return audited;
