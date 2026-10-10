@@ -3,7 +3,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { blazrInfo, runBlazr } from './blazr.mjs';
+import { blazrInfo, runBlazr, MIN_BLAZR } from './blazr.mjs';
 import { ManifestError } from './manifest.mjs';
 
 const skip = process.platform === 'win32';
@@ -37,10 +37,10 @@ function withBlazr(blazr, version, fn) {
 }
 
 test('a blazr at the minimum version with audio is usable', { skip }, () => {
-  withBlazr(undefined, 'blazr 0.1.1 (audio)', () => {
+  withBlazr(undefined, 'blazr 0.1.2 (audio)', () => {
     const info = blazrInfo();
     assert.equal(info.usable, true);
-    assert.equal(info.version, '0.1.1');
+    assert.equal(info.version, '0.1.2');
     assert.deepEqual(info.features, ['audio']);
     assert.equal(info.why, '');
   });
@@ -51,7 +51,7 @@ test('an older blazr is not usable and the reason names both versions', { skip }
     const info = blazrInfo();
     assert.equal(info.usable, false);
     assert.match(info.why, /0\.1\.0/);
-    assert.match(info.why, /0\.1\.1/);
+    assert.ok(info.why.includes(MIN_BLAZR), info.why);
   });
 });
 
@@ -74,7 +74,7 @@ test('"blazr": false turns blazr off', { skip }, () => {
 
 test('runBlazr returns the exit code of blazr', { skip }, () => {
   for (const code of [0, 1, 2]) {
-    withBlazr(undefined, 'blazr 0.1.1 (audio)', () => {
+    withBlazr(undefined, 'blazr 0.1.2 (audio)', () => {
       process.env.FAKE_EXIT = String(code);
       assert.equal(runBlazr('speak', []), code);
     });
@@ -82,7 +82,7 @@ test('runBlazr returns the exit code of blazr', { skip }, () => {
 });
 
 test('exit 3 hands the run to the skill', { skip }, () => {
-  withBlazr(undefined, 'blazr 0.1.1 (audio)', () => {
+  withBlazr(undefined, 'blazr 0.1.2 (audio)', () => {
     process.env.FAKE_EXIT = '3';
     assert.equal(runBlazr('transcribe', []), null);
   });
@@ -101,7 +101,7 @@ test('a configured blazr that is too old is an error', { skip }, () => {
 });
 
 test('runBlazr passes the command and its arguments on unchanged', { skip }, () => {
-  withBlazr(undefined, 'blazr 0.1.1 (audio)', () => {
+  withBlazr(undefined, 'blazr 0.1.2 (audio)', () => {
     const file = join(process.env.XDG_CONFIG_HOME, 'args');
     process.env.FAKE_ARGS = file;
     assert.equal(runBlazr('speak', ['a b', '--engine', 'kokoro']), 0);

@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { ManifestError } from './manifest.mjs';
 import { config, configFile } from './paths.mjs';
 
-export const MIN_BLAZR = '0.1.1';
+export const MIN_BLAZR = '0.1.2';
 
 const INSTALL = 'Install it with `cargo install blazr --locked --features audio` (add `,cuda` for an NVIDIA GPU), or from a release archive at https://github.com/ml-rust/blazr/releases.';
 

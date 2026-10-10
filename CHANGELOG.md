@@ -20,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `<skill-dir>` is defined once: the absolute path of the directory `SKILL.md` loaded from.
 - The speech check summary counts the parts marked `ok ?`, with their part numbers and kinds. It no longer says every phrase was heard back as written when some need a listen. The exit code stays 0.
 - A VoxCPM2 stray pause advises `--reroll`, not a comma: any edit to the text draws the whole part again. Each stray pause counts against a take, so retries and re-rolls keep the take with fewer.
-- `speak` and `transcribe` run in `blazr` (https://github.com/ml-rust/blazr) when version 0.1.1 or newer, built with the `audio` feature, is installed. Flags, outputs and exit codes stay the same. The config key `"blazr"` names the binary, and `"blazr": false` turns it off. A configured `blazr` that cannot run the command is an error. When `blazr` is missing, too old, or exits 3, the skill's own runner speaks or transcribes as before. With a CUDA `blazr`, VoxCPM2 needs no `uv`.
+- `speak` and `transcribe` run in `blazr` (https://github.com/ml-rust/blazr) when version 0.1.2 or newer, built with the `audio` feature, is installed. Flags, outputs and exit codes stay the same. The config key `"blazr"` names the binary, and `"blazr": false` turns it off. A configured `blazr` that cannot run the command is an error. When `blazr` is missing, too old, or exits 3, the skill's own runner speaks or transcribes as before. With a CUDA `blazr`, VoxCPM2 needs no `uv`.
 - The developer sound review runs in `blazr sound-review <dir> [--no-model]`, with no `uv` or PyTorch. `scripts/dev/sound-review.py` stays.
 
 ### Fixed
