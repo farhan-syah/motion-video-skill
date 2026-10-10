@@ -44,7 +44,7 @@ Every engine's output gets the voice polish: loudness evened sentence by sentenc
 2. **Write the script** per `narration.md`, plus the engine guide's writing rules.
 3. **Try one beat** with the chosen voice before the whole script.
 4. **Speak the script** as one file: `speak script.txt`. Pass `--language` for narration outside English.
-5. **Read the speech check** (`narration.md`, Speech check). A problem exits 1 with its fix.
+5. **Read the speech check** (`narration.md`, Speech check). A problem exits 1 with its fix. An `ok ?` part exits 0 and needs a listen.
 6. **Read the pace line.** A natural take inside the printed range needs no change. Outside it, the line says how to reach it for that engine.
 7. **Listen once** when playback is available. Report when it was not.
 

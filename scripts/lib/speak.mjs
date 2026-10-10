@@ -553,6 +553,8 @@ export function review(script, { language, notes = false } = {}) {
 // voice phrases by how it reads the grammar, so a word that can be a noun or a verb ("the support team calls each customer")
 // can pull the pause to the wrong place. Every word is still said, so the word check passes it.
 export const STRAY_PAUSE = 0.45;
+// The badness a stray pause adds to its take, as much as one extra word (checkSpeech), so a retry keeps fewer of them.
+export const STRAY_PAUSE_BADNESS = 0.3;
 export function strayPauses(heard, text, alignScript) {
   const out = [];
   const al = alignScript(heard, text);
@@ -651,10 +653,11 @@ async function voxcpm(script, { voice = '', reference = '', style = '', hifi = f
   // Takes made at the runner's own settings (cfg 2, 10 steps) keep their older keys.
   const takeFile = (s) => join(cache, `${hash(anchorKey, s.style ?? style, s.text, s.seed, ...(cfg !== 2 || steps !== 10 ? [cfg, steps] : []), ...(hifi ? ['hifi'] : []))}.wav`);
   // The designed voice speaks the script's opening, 25 words or more: a clip long enough for every part to hold it.
+  const OPENING_WORDS = 25;
   const opening = [];
   for (const p of phrases(script)) {
     opening.push(p.text);
-    if (opening.join(' ').split(/\s+/).length >= 25) break;
+    if (opening.join(' ').split(/\s+/).length >= OPENING_WORDS) break;
   }
   // Hi-Fi cloning: the reference and its exact transcript, which holds the voice closer to the reference. A designed
   // voice keeps the words it was designed on; a user's recording is transcribed. VoxCPM2 ignores the style then.
@@ -699,6 +702,9 @@ async function voxcpm(script, { voice = '', reference = '', style = '', hifi = f
     // Designs a voice from --voice into the current anchor file, then speaks its reference again.
     const design = (designSeed) => {
       console.error(`speak: designing the voice from --voice${designSeed !== seed ? ` (seed ${designSeed})` : ''}, speaking the script's opening: "${opening.join(' ')}"`);
+      // A reference shorter than the opening wanted holds the voice loosely: a longer script designs a firmer one.
+      const said = opening.join(' ').split(/\s+/).length;
+      if (said < OPENING_WORDS) console.error(`speak: the script's opening is only ${said} word${said === 1 ? '' : 's'}, so the designed voice's reference is short and holds the voice loosely. Design it on a longer script and pass its <out>.voice.wav as --reference.`);
       generate([{ index: 0, text: say(opening.join(' ')), seed: designSeed }], true);
       // The reference is repaired like a take: a glitch in it carries into every part cloned from it.
       writeFileSync(anchorFile, wav([repairClicks(tidy(samples(join(dir, 'anchor.wav'))).samples).samples], 48000).buf);
@@ -739,7 +745,8 @@ async function voxcpm(script, { voice = '', reference = '', style = '', hifi = f
     if (voiceFile) copyFileSync(anchorFile, voiceFile);
     // A take, repaired (thumps silenced, clicks smoothed, edges faded) and heard: the check hears what is used. A
     // repair is faster than a new take, so only what cannot be repaired fails it: a wrong word, or a cut-off end. A
-    // click the repair leaves is marked for a listen.
+    // click the repair leaves is marked for a listen. A stray pause passes too, but adds to the badness, so retries and
+    // re-rolls keep the take with fewer.
     const judge = async (s) => {
       const take = takeFile(s);
       const tidied = take.replace(/\.wav$/, '.tidy.wav');
@@ -747,6 +754,7 @@ async function voxcpm(script, { voice = '', reference = '', style = '', hifi = f
       const pops = repairClicks(t.samples);
       writeFileSync(tidied, wav([pops.samples], 48000).buf);
       const c = await heardCheck(tidied, sayable(s.text), language);
+      if (c.pauses.length) c.badness = (c.badness ?? 0) + STRAY_PAUSE_BADNESS * c.pauses.length;
       if (t.faults.length) {
         c.ok = false;
         c.why = [c.why, ...t.faults].filter(Boolean).join(', ');

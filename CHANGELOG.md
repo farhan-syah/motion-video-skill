@@ -9,12 +9,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ### Added
 
 - `check` warns when a visible element in scene 1 is still entering at frame 0, the thumbnail, and names how far through its entrance it is. It reads each animation's computed timing, so a custom `--in-dur` and a stagger count.
+- `speak` warns when it designs a voice from an opening of fewer than 25 words: the reference is short and holds the voice loosely.
 
 ### Changed
 
 - The scene template starts its hero and HUD line a full entrance early (`--t: calc(-1 * var(--in-dur, var(--dur-in)))`), so frame 0 of the opening scene shows them at rest. Later scenes keep `-0.2s`, which cuts mid-entrance.
 - The palette is written once, in `:root` of `base.css` (and `--surface` and `--on-accent` in `ui.css`), dark or light. `class="light"` switches only grain and surface shadows. The old light values wait in a comment as a ready light palette. A scene that relied on `class="light"` for its colors must paste that palette into `:root`.
 - `check` tests each cue's sound against the narration over the window `audit` measures: from its start, lead-in included, over its first 80-300 ms. Typing cues and each container accent are tested too. One shared function sets the window for both commands.
+- The speech check summary counts the parts marked `ok ?`, with their part numbers and kinds. It no longer says every phrase was heard back as written when some need a listen. The exit code stays 0.
+- A VoxCPM2 stray pause advises `--reroll`, not a comma: any edit to the text draws the whole part again. Each stray pause counts against a take, so retries and re-rolls keep the take with fewer.
 - `speak` and `transcribe` run in `blazr` (https://github.com/ml-rust/blazr) when version 0.1.1 or newer, built with the `audio` feature, is installed. Flags, outputs and exit codes stay the same. The config key `"blazr"` names the binary, and `"blazr": false` turns it off. A configured `blazr` that cannot run the command is an error. When `blazr` is missing, too old, or exits 3, the skill's own runner speaks or transcribes as before. With a CUDA `blazr`, VoxCPM2 needs no `uv`.
 - The developer sound review runs in `blazr sound-review <dir> [--no-model]`, with no `uv` or PyTorch. `scripts/dev/sound-review.py` stays.
 

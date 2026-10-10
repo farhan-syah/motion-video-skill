@@ -7,7 +7,7 @@ OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description
 
 ## How `speak` uses it
 
-1. **The voice:** with `--voice`, it designs a reference once by speaking the script's opening (25 words or more) and saves it as `<out>.voice.wav`. With `--reference`, the user's recording is the voice.
+1. **The voice:** with `--voice`, it designs a reference once by speaking the script's opening (25 words or more) and saves it as `<out>.voice.wav`. An opening under 25 words gives a short reference that holds the voice loosely, and `speak` says so. Design the voice on a longer script then, and pass its `<out>.voice.wav` as `--reference`. With `--reference`, the user's recording is the voice.
 2. **The narration:** the whole script is one generation, one take, cloning that reference. Each generation is a separate draw of the voice, so one take keeps it the same person from start to end. A line with its own delivery note is its own short generation, a timed script keeps each line apart, and a script over 700 words splits at a sentence end. One generation can run to about 11 minutes of audio.
 3. **The shape:** the script's words are found in the take. Each sentence gets its own span, and the silence at each blank line and `[pause]` mark is set to its length.
 4. **The check:** the take is heard back as a whole. A failing take regenerates under a new seed, up to 3 tries, and the best is kept. A take that fails every try is spoken again by beats, then by sentences.
@@ -92,10 +92,10 @@ OpenBMB's VoxCPM2 (Apache 2.0): 30 languages, voices designed from a description
 
 ## Takes and settings
 
-- **Takes are cached** by voice, delivery, text and seed (`~/.cache/motion-video/speak/voxcpm`). A re-run speaks only changed parts. The whole script is one part, so changing any line without a delivery note speaks the whole take again.
+- **Takes are cached** by voice, delivery, text and seed (`~/.cache/motion-video/speak/voxcpm`). A re-run speaks only changed parts. The whole script is one part, so changing any line without a delivery note speaks the whole take again. Any edit to a part's text, a single comma included, draws that whole part again: the new take can pause or stress words elsewhere.
 - **`<out>.takes.json`** records each chosen take and the voice's seed. A later run without `--seed` keeps both. A different `--seed` starts over. Keep the file beside the audio: moving the old audio aside keeps its takes only when this file stays.
 - **A part's first seed comes from its text,** so adding or splitting a line leaves every other part's take as it was. The parts are the take, each line with a delivery note, and each split of a script over 700 words.
-- **`--reroll 3,5`** draws new takes for those parts (the numbers in `speak`'s `ok ?` lines). A fresh take that passes as well as the earlier one replaces it. A worse one never does.
+- **`--reroll 3,5`** draws new takes for those parts (the numbers in `speak`'s `ok ?` lines). A fresh take that passes as well as the earlier one replaces it. A worse one never does. Each stray pause counts against a take, so a re-roll keeps the take with fewer. Re-roll a stray pause instead of rewording its line: a re-roll keeps the text.
 - **`--cfg 1.6 --steps 16`** by default. Guidance 1.0–2.0 is relaxed and natural, and above 2.0 follows the text more strictly with more noise. More steps (up to 30) are more natural and slower.
 - **Checkpoint:** loads offline from `"tts": { "checkpoint": "/path" }`, the model folder, or the Hugging Face cache. `doctor` names the one it finds.
 - **Out of GPU memory:** `speak` says how much is free. Another process holds the rest (`nvidia-smi` lists it).

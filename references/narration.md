@@ -75,7 +75,7 @@ A voice reads only the text. Its punctuation, spelling and word order are all it
 
    - **Period, ellipsis, em dash and question mark:** a full stop, a held or trailing pause, a set-off aside, and a rising end. Their lengths, and whether a mark pauses at all, differ by engine (its guide).
 
-   Read each sentence as it will be heard. A word that can be a noun or a verb after a noun ("the project records sound") is read as part of the noun unless a comma or a rewording separates them.
+   Read each sentence as it will be heard. A word that can be a noun or a verb after a noun ("the project records sound") is read as part of the noun unless a comma or a rewording separates them. After a VoxCPM2 take, re-roll a stray pause instead: any edit to the text draws its whole part again (Speech check).
 
    - **Two scripts:** ear punctuation reads as errors in captions. Keep the grammar version in its own file, with the same words, and pass both: `speak ear.txt --written script.txt`. The voice speaks the ear script. Captions, `transcribe` and phrase spans show the written one. `speak` stops before any audio when their words differ. Only punctuation, case and spacing can differ.
 
@@ -122,12 +122,14 @@ The user's own recordings never pass through it.
 - **Numbers:** every number must be heard as the script says it.
 - **Glitches (VoxCPM2):** a click in a pause is smoothed, and a thump before or after the speech is silenced, in place. Speech itself is never edited: inside a word, a /t/ or /k/ burst has a click's shape. A click the repair leaves is marked `ok ?`: listen to it. A take cut off mid-sound is spoken again. Every take's edges fade over a few milliseconds, so joins never click.
 - **Doubtful words:** when a passing phrase has words heard differently, a second Whisper model hears it too. A word both models miss is marked `ok ?`: listen to it.
-- **Stray pauses:** a pause over 0.45 s between two words with no punctuation between them is marked `ok ?`. A voice phrases by how it reads the grammar, so a word that can be a noun or a verb ("the support team calls each customer") can pull the pause to the wrong place. A comma where the break belongs, or a rewording, sets it.
-- **`ok ?` without audio playback:** reword the line, or give the name a spoken form (`{written|spoken}`), then run `speak` again. The line is settled when both recognizers hear it as written.
+- **Stray pauses:** a pause over 0.45 s between two words with no punctuation between them is marked `ok ?`. A voice phrases by how it reads the grammar, so a word that can be a noun or a verb ("the support team calls each customer") can pull the pause to the wrong place.
+  - Kokoro and other engines: a comma where the break belongs, or a rewording, sets it.
+  - VoxCPM2: listen to it, and `--reroll` the part if it is heard. An edit to the text draws the whole part again, and the new take can pause somewhere else. Each stray pause counts against a take, so retries and re-rolls keep the take with fewer.
+- **`ok ?` without audio playback:** reword the line, or give the name a spoken form (`{written|spoken}`), then run `speak` again. The line is settled when both recognizers hear it as written. A VoxCPM2 stray pause or pitch peak gets `--reroll` instead: a reworded part is drawn again and can go wrong somewhere else.
 - **Delivery (VoxCPM2):** a part whose pitch peaks above 1.6 times the voice's usual pitch is marked `ok ?`: it can sound shouted or excited. Listen, then calm its note or re-roll it.
 
 - **Per engine:** VoxCPM2 checks each take and regenerates a failing one under a new seed, up to 3 tries. A take that fails every try is spoken again by beats, then by sentences. Other engines get one check of the whole file.
-- **Output:** every part as heard. A remaining problem prints its fix and exits 1: reword it, or re-roll it where the engine allows (`tts/voxcpm2.md`).
+- **Output:** every part as heard, then a summary that counts the parts marked `ok ?`. Only a problem exits 1. An `ok ?` part exits 0 and needs a listen. A remaining problem prints its fix: reword it, or re-roll it where the engine allows (`tts/voxcpm2.md`).
 - **`--language`** sets the recognizer's language.
 
 ### Phrase spans

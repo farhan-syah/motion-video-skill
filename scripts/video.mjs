@@ -402,13 +402,29 @@ or "audio": "${rel(out)}" and "script": "${rel(txt)}" on the one scene it narrat
   // Every phrase as it was heard back, so a wrong word shows even when the check passes it.
   console.log('\nHeard back, phrase by phrase:');
   const { HEATED } = await import('./lib/speak.mjs');
-  checks.forEach((c, part) => console.log(`  ${c.ok ? (c.doubt?.length || c.heat > HEATED || c.pauses?.length || c.clicks?.length ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.heat > HEATED ? `\n        ${c.hotText ? `"${c.hotText.slice(0, 60)}": ` : ''}its pitch peaks at ${c.heat}x the voice's usual pitch: it can sound shouted or excited. Listen, then calm its delivery note or --reroll ${part + 1}` : ''}${(c.pauses ?? []).map((p) => `\n        a ${p.gap}s pause between "${p.after}" and "${p.before}", where the script has no break: the voice misread the grammar. Add a comma where the break belongs, or reword`).join('')}${c.clicks?.length ? `\n        a click the repair could not smooth, ${c.clicks.map((v) => `${v}s`).join(', ')} into this part: listen to it, and --reroll ${part + 1} if it is heard` : ''}${c.doubt?.length ? `\n        both recognizers missed or misheard ${c.doubt.map((w) => `"${w}"`).join(', ')}: listen to it, and ${/^VoxCPM2/.test(engine) ? `--reroll ${part + 1}` : 'reword the phrase'} if it is said wrong` : ''}`));
+  // A part that passed with something to listen to: a doubtful word, a pitch peak, a stray pause or a click.
+  const doubtful = (c) => Boolean(c.ok && (c.doubt?.length || c.heat > HEATED || c.pauses?.length || c.clicks?.length));
+  // VoxCPM2 draws a whole part again on any edit to its text, so a reworded part can pause somewhere else.
+  const pauseFix = (part) => (/^VoxCPM2/.test(engine) ? `Listen to it, and --reroll ${part + 1} if it is heard: an edit to the text draws the whole part again, and VoxCPM2 can pause somewhere else.` : 'Add a comma where the break belongs, or reword');
+  checks.forEach((c, part) => console.log(`  ${c.ok ? (doubtful(c) ? 'ok ?' : 'ok  ') : 'FAIL'} ${c.at.toFixed(2).padStart(6)}s  ${c.heard}${c.ok ? '' : `\n        ${c.why}`}${c.heat > HEATED ? `\n        ${c.hotText ? `"${c.hotText.slice(0, 60)}": ` : ''}its pitch peaks at ${c.heat}x the voice's usual pitch: it can sound shouted or excited. Listen, then calm its delivery note or --reroll ${part + 1}` : ''}${(c.pauses ?? []).map((p) => `\n        a ${p.gap}s pause between "${p.after}" and "${p.before}", where the script has no break: the voice misread the grammar. ${pauseFix(part)}`).join('')}${c.clicks?.length ? `\n        a click the repair could not smooth, ${c.clicks.map((v) => `${v}s`).join(', ')} into this part: listen to it, and --reroll ${part + 1} if it is heard` : ''}${c.doubt?.length ? `\n        both recognizers missed or misheard ${c.doubt.map((w) => `"${w}"`).join(', ')}: listen to it, and ${/^VoxCPM2/.test(engine) ? `--reroll ${part + 1}` : 'reword the phrase'} if it is said wrong` : ''}`));
+  // The parts marked ok ?, their numbers and what their notes hold, summed: an ok ? part exits 0 and needs a listen.
+  const marked = checks.map((c, i) => ({ c, part: i + 1 })).filter((m) => doubtful(m.c));
+  const count = (n, one) => `${n} ${one}${n === 1 ? '' : 's'}`;
+  const kinds = [
+    ['doubtful word', (c) => c.doubt?.length ?? 0],
+    ['stray pause', (c) => c.pauses?.length ?? 0],
+    ['pitch peak', (c) => (c.heat > HEATED ? 1 : 0)],
+    ['click', (c) => c.clicks?.length ?? 0],
+  ].map(([one, n]) => [one, marked.reduce((t, m) => t + n(m.c), 0)]).filter(([, n]) => n > 0).map(([one, n]) => count(n, one));
+  const single = marked.length === 1;
+  const listen = `${marked.length} of ${checks.length} part${checks.length === 1 ? '' : 's'} ${single ? 'is' : 'are'} marked ok ?: ${marked.map((m) => m.part).join(', ')} (${kinds.join(', ')}). Listen to ${single ? 'it' : 'them'} before using the take: each note above gives its fix.`;
   if (problems.length) {
     console.log(`\nThe speech check found ${problems.length} problem(s), heard back with Whisper:`);
     for (const p of problems) console.log(`  ${p}`);
+    if (marked.length) console.log(`Speech check: ${listen}`);
     return 1;
   }
-  console.log('Speech check: every phrase was heard back as written.');
+  console.log(marked.length ? `Speech check: no problem remains, but ${listen}` : 'Speech check: every phrase was heard back as written.');
   return 0;
 }
 
