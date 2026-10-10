@@ -7,7 +7,7 @@ description: Turn a short brief, plus optional screenshots, design references, l
 
 Direct first, then build. Never turn a plain brief straight into code.
 
-Tool: `node <skill-dir>/scripts/video.mjs <command>`, run from the project directory. `<skill-dir>` holds this SKILL.md. Setup and every flag: `references/cli.md`.
+Tool: `node <skill-dir>/scripts/video.mjs <command>`, run from the project directory. `<skill-dir>` is the absolute path of the directory this SKILL.md loaded from (for a user install, `~/.claude/skills/motion-video`). Never the project directory. Setup and every flag: `references/cli.md`.
 
 ## Workflow
 

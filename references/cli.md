@@ -1,6 +1,6 @@
 # CLI and manifest
 
-Run `node <skill-dir>/scripts/video.mjs <command>` from the project directory, and `init <dir>` from the directory that will hold the project. `<skill-dir>` holds `SKILL.md`. `--help` prints every flag.
+Run `node <skill-dir>/scripts/video.mjs <command>` from the project directory, and `init <dir>` from the directory that will hold the project. `<skill-dir>` is the absolute path of the directory `SKILL.md` loaded from, never the project directory. `--help` prints every flag.
 
 ## Setup
 
