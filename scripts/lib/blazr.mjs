@@ -47,6 +47,8 @@ export function runBlazr(cmd, argv) {
     if (info.configured) throw new ManifestError(info.why);
     return null;
   }
+  // A positive marker: without it, only a missing fallback line shows that blazr ran the command.
+  console.error(`${cmd}: running in blazr ${info.version} (${info.features.join(', ')})`);
   const r = spawnSync(info.bin, [cmd, ...argv], { stdio: 'inherit' });
   if (r.status === 3) {
     console.error(`${cmd}: blazr hands this run to the skill's own runner.`);
