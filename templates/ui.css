@@ -68,7 +68,7 @@
   color: var(--fg);
 }
 
-/* Status chips. */
+/* Status chips: a tint of the chip color over the frame. The text mixes the color with --fg, so it reads on a dark or a light palette. */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -78,7 +78,7 @@
   font-size: var(--fs-label);
   font-weight: 600;
   background: color-mix(in oklab, var(--chip, var(--accent)), transparent 86%);
-  color: color-mix(in oklab, var(--chip, var(--accent)), black 20%);
+  color: color-mix(in oklab, var(--chip, var(--accent)), var(--fg) 50%);
 }
 .chip.ok { --chip: var(--ok); }
 .chip.warn { --chip: var(--warn); }
@@ -212,8 +212,10 @@
 
 /*
  * Icon tile: an app-icon square with a line icon, as in a payment-method row or an app logo.
- *   <span class="tile" style="--tile:#2563eb"><i data-icon="wallet"></i></span>
- * --tile: its color. .tile.soft: a tinted tile with the icon in the color. --tile-s: size in --u.
+ *   <span class="tile" style="--tile:#2563eb; --tile-ink:#fff"><i data-icon="wallet"></i></span>
+ * --tile: its color, --accent by default. --tile-ink: the icon's color, --on-accent by default, so a tile on the
+ * accent reads on a dark or a light palette. A brand --tile sets its own --tile-ink. .tile.soft: a tile tinted toward --bg with the icon toward --fg, for a dark or a light palette.
+ * --tile-s: size in --u.
  */
 .tile {
   display: inline-grid;
@@ -222,15 +224,15 @@
   aspect-ratio: 1;
   border-radius: 26%;
   font-size: calc(var(--u) * var(--tile-s, 8) * 0.5);
-  color: #fff;
+  color: var(--tile-ink, var(--on-accent));
   background: linear-gradient(160deg, color-mix(in oklab, var(--tile, var(--accent)), white 18%), color-mix(in oklab, var(--tile, var(--accent)), black 12%));
   box-shadow:
     inset 0 calc(var(--u) * 0.2) 0 rgb(255 255 255 / 0.35),
     0 calc(var(--u) * 0.8) calc(var(--u) * 2) color-mix(in oklab, var(--tile, var(--accent)), transparent 65%);
 }
 .tile.soft {
-  color: color-mix(in oklab, var(--tile, var(--accent)), black 15%);
-  background: color-mix(in oklab, var(--tile, var(--accent)), white 84%);
+  color: color-mix(in oklab, var(--tile, var(--accent)), var(--fg) 50%);
+  background: color-mix(in oklab, var(--tile, var(--accent)), var(--bg) 84%);
   box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--tile, var(--accent)), transparent 75%);
 }
 

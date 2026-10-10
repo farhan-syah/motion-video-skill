@@ -138,7 +138,7 @@ Link `ui.css` and extend it.
 | ------------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | Surfaces     | `.card`, `.card.featured` + `.ribbon`, `.window > .bar`, `.phone > .screen`, `.monitor > .screen` | `.featured` outlines the recommended plan                    |
 | Phone action | `.tap`, `.sheet` with `--in:sheet-up`                                                             | A touch mark and a bottom sheet inside `.screen`             |
-| Icon tile    | `.tile`, `.tile.soft`, `--tile`                                                                   | App-icon squares for payment methods, features, logos        |
+| Icon tile    | `.tile`, `.tile.soft`, `--tile`, `--tile-ink`                                                       | App-icon squares for payment methods, features, logos        |
 | Labels       | `.chip`, `.chip.ok/.warn/.bad`, `.pill`, `.pill.glow`, `.kicker`                                  | `.kicker` is a numbered chapter tag: `<b>01</b>Rekod jualan` |
 | Messages     | `.toast`, `.callout`, `.bubble`, `.bubble.out`, `.dots`                                           | `.callout` pairs with a leader line                          |
 | Input        | `.prompt` with `.send`, `.btn` with `press`, `.cursor` + `.ripple`                                |                                                              |

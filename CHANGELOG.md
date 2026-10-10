@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Fixed
 
+- A plain `.tile` draws its icon in `--tile-ink`, `--on-accent` by default, so the icon reads on the accent of a dark or a light palette. A brand `--tile` sets its own `--tile-ink`.
 - `cli.md` and `--help` match what `render` does: a render of the whole video, draft or not, runs `audit` and writes `out/sheet.png`, `out/thumbnail.png` and `out/stems/`. Only a non-draft render writes the compressed copy.
 - `SKILL.md` no longer sends a render's review to a second `audit` run: `render` already ran it. A sound-only fix needs `render` again.
 - `tts.md` no longer says every Hugging Face model needs `uv`. Only PyTorch-only weights do.
@@ -32,6 +33,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `check` no longer crashes on text over a `color-mix()` fill, such as the default card. It reads every computed color as sRGB.
 - `render --scene` on a one-scene video runs `audit` and writes `out/sheet.png`, as a render of the whole video does.
 - `check` no longer reports caption words in a `.hud` as screen text that drifts with the camera. It matched text across frames by its place in the page, and each caption line replaces its words, so it compared different words, some mid-pop. A caption track is one box now, measured by the block that holds it, and every text element keeps its own track across frames.
+- `.chip` text mixes its color with `--fg`, not black, so it passes the contrast rule on the dark and the light palette. `.tile.soft` tints toward `--bg` and `--fg` the same way: on the dark palette its icon was light gray on near-white.
 - A caption line that shows at video time 0 opens at rest, so frame 0, the thumbnail, never shows it dim mid-pop. A project made earlier keeps its own `motion.js`: copy the template's over it.
 
 ## [1.4.1] - 2026-09-27
