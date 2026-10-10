@@ -5,7 +5,8 @@ import { existsSync, readdirSync, statfsSync, statSync } from 'node:fs';
 import { cpus, freemem, platform, totalmem } from 'node:os';
 import { extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cacheRoot, config, configFile, modelsDir } from './paths.mjs';
+import { blazrInfo } from './blazr.mjs';
+import { cacheRoot, config, configFile, hubCaches, modelsDir } from './paths.mjs';
 
 const first = (cmd, args) => {
   const r = spawnSync(cmd, args, { encoding: 'utf8', shell: process.platform === 'win32' });
@@ -24,6 +25,24 @@ const KINDS = {
 // Files init copies into a project, and files the skill writes: the skill's own, not the user's material.
 const SKILL_FILES = new Set(readdirSync(fileURLToPath(new URL('../../templates', import.meta.url))));
 const skillFile = (name) => SKILL_FILES.has(name) || /\.phrases\.json$|\.words\.json$/.test(name);
+
+// A Hugging Face model's file in the given folders, or null. A folder holds a model as <name>, <org>/<name> or in hub
+// layout (models--<org>--<name>/snapshots/<rev>), the places blazr searches. existsSync follows symlinks, so a stalled
+// download does not count.
+export function findHubModel(id, file, dirs = hubCaches()) {
+  for (const dir of dirs) {
+    const plain = [join(dir, id.split('/').pop(), file), join(dir, ...id.split('/'), file)].find((f) => existsSync(f));
+    if (plain) return plain;
+    const snaps = join(dir, `models--${id.replace('/', '--')}`, 'snapshots');
+    let revs = [];
+    try {
+      revs = readdirSync(snaps);
+    } catch {}
+    const hit = revs.map((r) => join(snaps, r, file)).find((f) => existsSync(f));
+    if (hit) return hit;
+  }
+  return null;
+}
 
 // Free space on the disk that holds a folder, or null.
 const freeSpace = (dir) => {
@@ -114,23 +133,34 @@ export async function doctor(root) {
   lines.push('', 'SPEECH');
   const cfg = config();
   const asrDir = join(cacheRoot(), 'asr', 'node_modules');
-  const runtime = existsSync(join(asrDir, '@huggingface', 'transformers'));
-  say('runtime', runtime ? 'installed' : 'not installed: speak or transcribe installs it once (about 500 MB)');
-  say('kokoro', existsSync(join(asrDir, 'kokoro-js')) ? 'installed' : 'installs on first speak');
+  const blazr = blazrInfo();
+  say('blazr', blazr.usable ? `${blazr.version} (${blazr.features.join(', ')}) at ${blazr.bin}: speak, transcribe and sound-review run in it` : `not used: ${blazr.why}`);
+  if (!blazr.usable) {
+    const runtime = existsSync(join(asrDir, '@huggingface', 'transformers'));
+    say('runtime', runtime ? 'installed' : 'not installed: speak or transcribe installs it once (about 500 MB)');
+    say('kokoro', existsSync(join(asrDir, 'kokoro-js')) ? 'installed' : 'installs on first speak');
+  }
   const models = modelsDir();
   say('model folder', `${models}${existsSync(configFile()) ? `  (from ${configFile()})` : ''}`);
   const have = (id) => existsSync(join(models, ...id.split('/')));
   const whisperState = (name, size, use) => `${name} (${use}): ${have(`onnx-community/whisper-${name}_timestamped`) ? 'ready' : `downloads on first use, about ${size}`}`;
-  say('whisper', `${whisperState('base', '75 MB', 'English')}; ${whisperState('small', '240 MB', 'other languages')}`);
+  const blazrWhisper = (name, size, use) => `${name} (${use}): ${findHubModel(`openai/whisper-${name}`, 'model.safetensors') ? 'ready' : `downloads on first use, about ${size}`}`;
+  if (blazr.usable) say('whisper', `${blazrWhisper('base', '290 MB', 'English')}; ${blazrWhisper('small', '970 MB', 'other languages')}`);
+  else say('whisper', `${whisperState('base', '75 MB', 'English')}; ${whisperState('small', '240 MB', 'other languages')}`);
   if (cfg.asr?.model) say('asr model', `${cfg.asr.model} (from the config, for every language)`);
-  say('kokoro model', have('onnx-community/Kokoro-82M-v1.0-ONNX') ? 'ready' : 'downloads on first speak (about 90 MB)');
-  const { voxcpmCheckpoint, voxcpmReady } = await import('./speak.mjs');
-  const vox = voxcpmReady();
+  if (blazr.usable) say('kokoro model', findHubModel('hexgrad/Kokoro-82M', 'kokoro-v1_0.pth') ? 'ready' : 'downloads on first speak (about 330 MB)');
+  else say('kokoro model', have('onnx-community/Kokoro-82M-v1.0-ONNX') ? 'ready' : 'downloads on first speak (about 90 MB)');
+  const { nvidiaGpu, voxcpmCheckpoint, voxcpmReady } = await import('./speak.mjs');
+  // A blazr with CUDA runs VoxCPM2 itself, so the skill's Python runner and uv are not needed.
+  const nativeGpu = blazr.usable && blazr.features.includes('cuda') ? nvidiaGpu() : null;
+  const vox = nativeGpu && nativeGpu.gb >= 7.5 ? { ok: true, why: `${nativeGpu.name}, ${nativeGpu.gb.toFixed(0)} GB, in blazr` } : voxcpmReady();
   // In a sandbox or container, the browser and the GPU can be hidden while the machine has both.
   if (failed && !vox.ok) limits.push('the browser did not start and no usable NVIDIA GPU was found. Inside a sandbox or container, doctor sees that environment, not the machine: run it again with host access before planning around these limits.');
   const uv = first('uv', ['--version']);
-  say('uv', uv ?? 'not found: VoxCPM2 and PyTorch-only --model voices need it to build their Python environment (https://docs.astral.sh/uv)');
-  say('cpu voices', uv ? '--model <id> runs a Hugging Face TTS model on the CPU, one whose license allows the video\'s use (references/tts/huggingface.md). First run builds a 1.1 GB Python environment' : 'English only (Kokoro). Install uv to run Hugging Face TTS models (https://docs.astral.sh/uv)');
+  if (blazr.usable) say('uv', `${uv ?? 'not found'}: needed only by the fallback runner, for VoxCPM2 when blazr has no CUDA and for --model voices that are not VITS safetensors (https://docs.astral.sh/uv)`);
+  else say('uv', uv ?? 'not found: VoxCPM2 and PyTorch-only --model voices need it to build their Python environment (https://docs.astral.sh/uv)');
+  if (blazr.usable) say('cpu voices', `--model <id> runs a VITS (MMS-TTS) Hugging Face model in blazr, one whose license allows the video's use (references/tts/huggingface.md).${uv ? ' Other models run in Python, and their first run builds a 1.1 GB environment' : ' Other models need uv (https://docs.astral.sh/uv)'}`);
+  else say('cpu voices', uv ? '--model <id> runs a Hugging Face TTS model on the CPU, one whose license allows the video\'s use (references/tts/huggingface.md). First run builds a 1.1 GB Python environment' : 'English only (Kokoro). Install uv to run Hugging Face TTS models (https://docs.astral.sh/uv)');
   let ckpt;
   try {
     ckpt = voxcpmCheckpoint();
@@ -146,9 +176,9 @@ export async function doctor(root) {
       ? 'VoxCPM2, the best engine here: 30 languages. Design its voice with --voice "(…)". --engine kokoro only for a fast English draft.'
       : `Kokoro, English only: VoxCPM2 ${vox.why}. Other languages: the user's TTS (--command), a recording, or a Hugging Face model whose license allows the video's use (references/tts.md).`);
   if (!vox.ok && !cfg.tts?.command && !cfg.tts?.model) {
-    limits.push(`narration in a language other than English: no built-in engine here (VoxCPM2 ${vox.why}). Ask for the user's TTS (speak --command) or a recording${uv ? ', or use a Hugging Face model whose license allows the video\'s use (speak --model)' : ''}.`);
+    limits.push(`narration in a language other than English: no built-in engine here (VoxCPM2 ${vox.why}). Ask for the user's TTS (speak --command) or a recording${uv || blazr.usable ? ', or use a Hugging Face model whose license allows the video\'s use (speak --model)' : ''}.`);
   }
-  const gpuNow = vox.ok ? (await import('./speak.mjs')).nvidiaGpu() : null;
+  const gpuNow = vox.ok ? nvidiaGpu() : null;
   if (gpuNow && gpuNow.freeGb < 7.5) limits.push(`the GPU has ${gpuNow.freeGb.toFixed(1)} GB free now, and VoxCPM2 needs about 8 GB. Another process holds the rest (nvidia-smi lists it): speak with VoxCPM2 once it ends.`);
   const modelFree = freeSpace(existsSync(models) ? models : cacheRoot());
   if (vox.ok && ckpt.startsWith('no checkpoint') && modelFree != null && modelFree < 8 * 1024 ** 3) limits.push(`VoxCPM2's first run downloads about 4.7 GB, and the model folder's disk has ${gb(modelFree)} free.`);
