@@ -201,7 +201,7 @@ body::after {
  *   --t     entrance start in seconds from scene start
  *   --i     stagger index; each step adds --stagger
  *   --out   exit keyframes: fade-out sink-out rise-out blur-out zoom-out wipe-out
- *   --out-t exit start; default: the exit ends 0.1s before the scene cut
+ *   --out-t exit start in seconds from scene start, like --t; default: the exit ends 0.1s before the scene cut
  *   --dur-out exit length; default 0.45s
  */
 /* Per-element motion inputs do not inherit: a child .m inside a staggered parent keeps its own timing. */

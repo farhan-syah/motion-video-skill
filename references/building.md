@@ -72,7 +72,10 @@ Put `class="m"` on an element and drive it with custom properties.
   - **`zoom`:** only for an image or preview opening up (a screenshot, a video frame, a device screen).
   - **Vary across scenes:** the same main entrance in every scene reads as a template.
 - **Entrance:** `--in:<name>`, starting at `--t`, plus `--i` × `--stagger`.
-- **Exit:** `--out:<name>`, ending 0.1s before the cut unless `--out-t` sets it.
+- **Exit:** `--out:<name>` runs for `--dur-out` (0.45s by default) and holds its end state to the cut. By default it ends 0.1s before the cut.
+- **Exit start:** `--out-t` is the exit start in seconds from this scene's start, the clock `--t` uses, never video time. The exit ends at `--out-t` plus `--dur-out`.
+  - Past the scene end: an exit still running at the cut is cut mid-way. Each scene is its own page, so the next scene, the end card included, opens on its own frame 0 and nothing carries over.
+  - Same slot: to hand a slot to another element in this scene, end the exit at or before that element's `--t`.
 - **Durations:** `--in-dur` for the entrance, `--dur-out` for the exit. Easing: `--in-ease` (`--ease-out`, `--ease-emph`, `--ease-spring`).
 - **Stacking:** a `.m` element takes one entrance and one exit. For more motion, nest wrappers, each with its own `.m` or animation.
 - **Line reveal:** `<span class="line"><span class="m" style="--in:reveal">…</span></span>`.
