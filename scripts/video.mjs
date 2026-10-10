@@ -5,6 +5,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statS
 import { availableParallelism, homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { runBlazr } from './lib/blazr.mjs';
 import { ManifestError, AUDIO_LEAD, loadManifest, pickScenes } from './lib/manifest.mjs';
 
 const HELP = `Usage: node video.mjs <command> [options]
@@ -303,6 +304,8 @@ async function mapCmd(opts) {
 }
 
 async function speakCmd(opts) {
+  const code = runBlazr('speak', opts.argv);
+  if (code !== null) return code;
   const { speak } = await import('./lib/speak.mjs');
   const arg = opts.rest.join(' ').trim();
   if (!arg) throw new ManifestError('speak needs the script: a text file, or the words in quotes.');
@@ -1020,6 +1023,7 @@ async function main() {
   if (process.versions.bun) return reexecUnderNode();
   const [cmd, ...argv] = process.argv.slice(2);
   const opts = parseArgs(argv);
+  opts.argv = argv;
   if (!cmd || opts.help || ['help', '--help', '-h'].includes(cmd)) {
     console.log(HELP);
     return 0;
@@ -1072,6 +1076,10 @@ async function main() {
   }
   if (cmd === 'sounds') {
     return sounds();
+  }
+  if (cmd === 'transcribe') {
+    const code = runBlazr('transcribe', opts.argv);
+    if (code !== null) return code;
   }
   // transcribe reads any audio or video file without a project. Its words then go to ./out/voice.
   if (cmd === 'transcribe' && opts.rest.length && !existsSync(opts.manifest)) {

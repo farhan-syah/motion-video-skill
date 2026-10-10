@@ -15,7 +15,8 @@ export function cacheRoot() {
 // The user's settings, shared by every project: ~/.config/motion-video/config.json.
 //   { "models": "/path/to/models",
 //     "tts": { "command": "...", "model": "hf-id", "voice": "af_heart", "engine": "voxcpm", "checkpoint": "/path" },
-//     "asr": { "model": "onnx-community/whisper-small_timestamped" } }
+//     "asr": { "model": "onnx-community/whisper-small_timestamped" },
+//     "blazr": "/path/to/blazr" }   (false turns blazr off)
 export function config() {
   const f = configFile();
   if (!existsSync(f)) return {};
