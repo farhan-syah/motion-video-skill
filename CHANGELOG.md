@@ -23,6 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `speak` and `transcribe` run in `blazr` (https://github.com/ml-rust/blazr) when version 0.1.2 or newer, built with the `audio` feature, is installed. Flags, outputs and exit codes stay the same. The config key `"blazr"` names the binary, and `"blazr": false` turns it off. A configured `blazr` that cannot run the command is an error. When `blazr` is missing, too old, or exits 3, the skill's own runner speaks or transcribes as before. With a CUDA `blazr`, VoxCPM2 needs no `uv`.
 - The developer sound review runs in `blazr sound-review <dir> [--no-model]`, with no `uv` or PyTorch. `scripts/dev/sound-review.py` stays.
 - `building.md` says what `--out-t` counts: seconds from the scene's start, the clock `--t` uses. An exit still running at the cut is cut mid-way, since the next scene and the end card open on their own frame 0.
+- The workflow step that runs `init` says it writes a placeholder `scenes/01-hook.html` and a one-scene `video.json` to replace.
 
 ### Fixed
 
