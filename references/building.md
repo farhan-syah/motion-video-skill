@@ -351,6 +351,16 @@ Voiceover, text to speech, word timing, caption tracks and sync checks: `narrati
 - **Light worlds:** the palette is whatever `:root` in `base.css` holds. Write the light palette there once (a neutral one waits in its comment). `class="light"` on `<html>` switches grain and surface shadows only. A scene's own `:root { … }` tokens still win.
 - **Avatars:** `.avatar.g1`–`.g6` gradients keep white initials at 4.5:1 or better.
 
+## Frame determinism
+
+`check` reports "Pixels change on real time" when a seek draws a different image each time. Fixes, in order:
+
+- **Own layer:** give an animated SVG or bar layer `filter: opacity(1)` (or `transform: translateZ(0)`). The GPU then rasterizes its edges the same at every seek.
+- **Canvas reads:** create 2D contexts with `willReadFrequently: true` when the scene reads pixels back.
+- **Dashes:** a dashed stroke that moves shimmers. Place dots by time along the path instead.
+- **Load-only flakes:** a flake that shows only in the whole-project `check`, not in `check --scene N`, comes from CPU load. Render with `--force`. Fix a flake that also shows alone.
+- **Inherited rules:** a library stylesheet's `svg { position: absolute }` also hits an icon you place in the flow. Reset it with `position: static`, or the icon pins to a corner.
+
 ## Render cost
 
 - **Heavy:** `filter: blur`, `backdrop-filter` and large `box-shadow` slow capture. Use them on few elements: a few clouds, one or two glass panels.
