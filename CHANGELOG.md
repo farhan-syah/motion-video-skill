@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-19
+
+### Added
+
+- `render --capture png|jpeg`: JPEG q92 frames in a full-quality render. About 35% faster than PNG, files about 50% larger. Default `png`.
+- `references/delivery.md`: the output per platform (ratio, size, fps, upload copy), YouTube 1440p and HEVC rules, and screen recording for footage. `SKILL.md` asks for the platform and for captions, and routes to it.
+- `references/tts/elevenlabs.md` and `templates/tts-elevenlabs.mjs`: ElevenLabs narration as one cached take per piece, with exact silence, a section pause, fades, a tail-level retry, and `eleven_v4` as the default model. It records the breath finding for `eleven_multilingual_v2`.
+- `references/narration.md`, Joining takes: exact silence, a pause at section changes, fades, tail checks and ear punctuation for any engine that gives separate takes. Captions are asked first and left out of text-heavy videos.
+- `references/direction.md`, Teaching films: aspirational tone, one worked example, no disclaimer framing, spoken-name and copy audits.
+- `references/building.md`, Frame determinism: fixes for "Pixels change on real time".
+
+### Changed
+
+- `render` runs one Chromium per worker, not one for all pages. One Chromium serialises screenshot encoding, so PNG capture stayed near 15 fps at any page count. Measured on a 24-thread machine at 2560x1440: 8 pages in one browser 14.7 fps, 8 browsers 56.7, 12 browsers 68.1. The default `--jobs` cap rises from 8 to 12.
+
+### Fixed
+
+- `render --scale` produced frames at the manifest size. The capture clip now carries the scale, so `--scale 1.3333334` gives 2560x1440.
+
 ## [1.5.0] - 2026-10-11
 
 ### Added
@@ -190,7 +209,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Master MP4 and `-compressed.mp4` copy.
 - `doctor`, `version` and `update` commands.
 
-[unreleased]: https://github.com/farhan-syah/motion-video-skill/compare/v1.5.0...HEAD
+[unreleased]: https://github.com/farhan-syah/motion-video-skill/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/farhan-syah/motion-video-skill/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/farhan-syah/motion-video-skill/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/farhan-syah/motion-video-skill/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/farhan-syah/motion-video-skill/compare/v1.3.0...v1.4.0
