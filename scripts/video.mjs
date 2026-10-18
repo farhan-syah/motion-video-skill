@@ -61,7 +61,7 @@ Commands:
   check [--scene NAME]           Lint every scene. With --scene, also write that scene's still sheet.
                                  Exits 1 on any error.
   still [--scene NAME] [T ...]   Render frames at T seconds to out/stills/. With no T, write one contact sheet per scene.
-  render [--scene NAME] [--draft] [--scale N] [--jobs N] [--force]
+  render [--scene NAME] [--draft] [--scale N] [--jobs N] [--capture png|jpeg] [--force]
                                  Check (skipped when a clean check already covers these files), render to the
                                  manifest "output". A whole-video render, draft or not, then runs audit (unless
                                  "sfx": false) and writes out/sheet.png, out/thumbnail.png and out/stems/. Only a
@@ -69,7 +69,9 @@ Commands:
                                  Exits 1 on a failing cue.
                                  --draft   half size, JPEG capture, fast encode.
                                  --scale 2 renders at twice the manifest size (1920x1080 -> 4K).
-                                 --jobs N  parallel browser pages. Default: half the CPU threads, at most 8.
+                                 --jobs N  parallel workers, one browser each. Default: half the CPU threads, at most 12.
+                                 --capture jpeg  JPEG q92 frames in a non-draft render: about 35% faster than PNG, files about 50% larger.
+                                           Default png.
                                  --force   render despite check errors.
   sheet                          Write out/sheet.png: 16 frames sampled across the rendered video.
   audit                          Check cue sync, sound intent, overlapping impacts and sound shape.
@@ -93,7 +95,7 @@ function num(flag, v, min) {
 }
 
 function parseArgs(argv) {
-  const opts = { manifest: 'video.json', scene: null, draft: false, force: false, scale: 1, jobs: null, start: null, name: null, subset: null, model: null, language: null, script: null, voice: null, speed: null, seed: null, reroll: null, check: false, out: null, command: null, engine: null, reference: null, device: null, fit: null, bbox: null, highlight: null, pin: [], route: [], layer: [], land: null, detail: null, size: null, countries: false, from: null, to: null, fps: null, width: null, rest: [] };
+  const opts = { manifest: 'video.json', scene: null, draft: false, force: false, scale: 1, jobs: null, capture: null, start: null, name: null, subset: null, model: null, language: null, script: null, voice: null, speed: null, seed: null, reroll: null, check: false, out: null, command: null, engine: null, reference: null, device: null, fit: null, bbox: null, highlight: null, pin: [], route: [], layer: [], land: null, detail: null, size: null, countries: false, from: null, to: null, fps: null, width: null, rest: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--manifest') opts.manifest = argv[++i];
@@ -101,6 +103,7 @@ function parseArgs(argv) {
     else if (a === '--draft') opts.draft = true;
     else if (a === '--force') opts.force = true;
     else if (a === '--scale') opts.scale = num(a, argv[++i], 0.25);
+    else if (a === '--capture') { opts.capture = argv[++i]; if (!['png', 'jpeg'].includes(opts.capture)) throw new Error('--capture takes png or jpeg'); }
     else if (a === '--jobs') opts.jobs = Math.floor(num(a, argv[++i], 1));
     else if (a === '--start') opts.start = num(a, argv[++i], 0);
     else if (a === '--name') opts.name = argv[++i];
@@ -633,22 +636,22 @@ async function still(m, scenes, times) {
   for (const l of lines) for (const x of l ?? []) console.log(x);
 }
 
-async function render(m, scenes, { draft, scale: userScale, jobs: userJobs }, opts) {
+async function render(m, scenes, { draft, scale: userScale, jobs: userJobs, capture }, opts) {
   const { openScene, frameTimes } = await import('./lib/browser.mjs');
   const { frameEncoder, concatSegments, muxAudio, hasNvenc } = await import('./lib/encode.mjs');
   // Captured segments are cached by what they show. A render after a sound-only edit captures no frames.
   const cacheDir = join(m.outDir, '.cache');
   mkdirSync(cacheDir, { recursive: true });
   const visual = visualStamp(opts);
-  const keyOf = (s, times) => createHash('sha1').update([visual, s.name, times[0], times.length, draft, userScale, hasNvenc()].join('|')).digest('hex');
+  const keyOf = (s, times) => createHash('sha1').update([visual, s.name, times[0], times.length, draft, userScale, capture, hasNvenc()].join('|')).digest('hex');
   const used = new Set();
   let reused = 0;
   const work = join(m.outDir, '.work');
   rmSync(work, { recursive: true, force: true });
   mkdirSync(work, { recursive: true });
-  const format = draft ? 'jpeg' : 'png';
+  const format = draft ? 'jpeg' : capture ?? 'png';
   const scale = draft ? 0.5 : userScale;
-  const jobs = userJobs ?? Math.max(1, Math.min(8, Math.floor(availableParallelism() / 2)));
+  const jobs = userJobs ?? Math.max(1, Math.min(12, Math.floor(availableParallelism() / 2)));
   // Split every scene into frame chunks, so one long scene still renders on every worker.
   const totalFrames = scenes.reduce((n, s) => n + s.frames, 0);
   const chunkSize = Math.max(m.fps * 2, Math.ceil(totalFrames / (jobs * 2)));
@@ -663,7 +666,13 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs }, op
   const segments = await withBrowser(async (browser) => {
     const done = new Array(chunks.length);
     let next = 0;
-    const worker = async () => {
+    // One browser per worker: a single Chromium serialises screenshot encoding across its pages (about 15 fps for PNG
+    // however many pages), while separate browsers scale with the workers. The first worker uses the shared browser.
+    const { launch: launchBrowser } = await import('./lib/browser.mjs');
+    const extra = [];
+    const worker = async (_, w) => {
+      const own = w === 0 ? browser : await launchBrowser({ quiet: true });
+      if (w !== 0) extra.push(own);
       while (next < chunks.length) {
         const i = next++;
         const { s, times } = chunks[i];
@@ -679,7 +688,7 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs }, op
           done[i] = out;
           continue;
         }
-        const sc = await openScene(browser, m, s, { scale });
+        const sc = await openScene(own, m, s, { scale });
         const enc = hit ? null : frameEncoder(m.fps, out, { format, draft });
         try {
           if (sc.errors.length) throw new Error(`Scene ${s.name} failed to load:\n  ${sc.errors.join('\n  ')}`);
@@ -715,7 +724,11 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs }, op
         done[i] = out;
       }
     };
-    await Promise.all(Array.from({ length: Math.min(jobs, chunks.length) }, worker));
+    try {
+      await Promise.all(Array.from({ length: Math.min(jobs, chunks.length) }, worker));
+    } finally {
+      await Promise.all(extra.map((b) => b.close().catch(() => {})));
+    }
     return done;
   });
   if (reused) console.log(`reused ${reused}/${totalFrames} frames from the cache: nothing visible changed in them.`);

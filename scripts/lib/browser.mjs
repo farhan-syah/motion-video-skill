@@ -144,6 +144,9 @@ export async function openScene(browser, m, scene, { scale = 1 } = {}) {
   const failed = await page.evaluate(prepare);
   for (const f of failed) errors.push(`asset failed to load: ${f}`);
   const cdp = await ctx.newCDPSession(page);
+  // A raw capture returns CSS pixels whatever the device pixel ratio, so the clip carries the scale. --scale and
+  // --draft then give frames of the requested size, with text and vector layers drawn at that size.
+  const clipScale = scale;
   return {
     page,
     errors,
@@ -151,6 +154,7 @@ export async function openScene(browser, m, scene, { scale = 1 } = {}) {
     // JPEG is the fast draft path. PNG keeps exact RGB for the final encode.
     capture: async (format = 'png') => {
       const params = format === 'jpeg' ? { format, quality: 92, optimizeForSpeed: true } : { format, optimizeForSpeed: true };
+      if (Math.abs(clipScale - 1) > 0.001) params.clip = { x: 0, y: 0, width: m.width, height: m.height, scale: clipScale };
       const { data } = await cdp.send('Page.captureScreenshot', params);
       return Buffer.from(data, 'base64');
     },
