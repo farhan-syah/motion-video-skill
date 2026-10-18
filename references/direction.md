@@ -131,7 +131,7 @@ Add cue times: each sub-action starts on a beat, 2–4 beats apart.
 ## 7. Write the copy
 
 - **Copy system:** pick one that fits the concept and keep it through the video:
-  - **Caption track:** one narration line per beat along the bottom, the key word in the accent.
+  - **Caption track:** one narration line per beat along the bottom, the key word in the accent. Use it only when the user asked for captions or the picture carries no other text.
   - **Statements:** big centered lines that change size and place with each beat's composition.
   - **Chapter headlines:** a parallel two-line pattern in a fixed `.hud` slot, with a label such as "03 · DIRECT", each marked `data-headline`. For a chaptered explainer, not the default.
 - **Under narration:** the voice carries the sentences. The screen shows what the ear cannot hold: the key word, number, name, place, or a word-synced caption track. Never a second copy of the script beyond a caption track.
@@ -139,6 +139,15 @@ Add cue times: each sub-action starts on a beat, 2–4 beats apart.
 - **Feature cards:** one per feature, at the top or bottom, never over the action.
 - **Reading time:** every line holds for at least words ÷ 3 seconds.
 - **UI copy:** real names, amounts, dates. Never "Lorem ipsum" or "Feature 1".
+
+### Teaching films (public explainers)
+
+- **Tone:** aspirational and confident. It teaches from one worked example, in plain words. It is not a sales video and not a compliance review.
+- **No disclaimer framing:** no "Simulated", "Illustrative" or "Schematic" labels, and no closing chapter on what is real or missing. State an assumption once, in a small line where the number appears.
+- **One spine:** follow one concrete job from request to result. Never frame the film as a list of questions.
+- **Strength first:** say what the product does plainly. A caveat never replaces that statement.
+- **Spoken names:** check each place name and term the voice says. A name the engine mispronounces is dropped from narration or given a `{written|spoken}` form. It can stay on screen.
+- **Copy audit:** before the first render, read every on-screen and spoken line as a stranger. Rewrite wording that means nothing out of context. Run the same audit on a product site or UI the film shows.
 
 ## 8. Finish the document
 
