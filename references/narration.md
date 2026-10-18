@@ -96,6 +96,18 @@ After `speak`, its check reports what still went wrong in the audio (Speech chec
 
 Kokoro, Hugging Face models and the user's TTS keep every mark exact. VoxCPM2 speaks the script as one take and sets its pauses from punctuation. `speak` then sets the silence at each blank line and `[pause]` mark to its length (`tts/voxcpm2.md`).
 
+### Joining takes
+
+Any engine that gives separate takes, or any recording cut into parts, needs these when the parts are joined:
+
+- **Exact silence between takes.** Never rely on a model's own pause at a full stop: it is short and uneven, and a list of short sentences runs together. Put each short sentence of a list in its own take, with a set gap.
+- **A silent pause at every section change.** Add 0.8 to 1.2 s on top of the usual gap where a chapter or a scene group changes. Joining takes with only the usual gap shows the cut as an abrupt stop.
+- **Fade every take.** At least 100 ms out and 20 ms in. A take must never end or begin dead against silence.
+- **Read the end of every take.** A take that ends while the voice is still loud lost its last syllable. Regenerate it, or cut the sentence so the take ends on a falling word.
+- **Punctuate for the ear first.** A long sentence with no commas runs on. Break it where a listener breathes.
+
+Per engine: `tts/elevenlabs.md` and `tts/voxcpm2.md`.
+
 ### Writing for a generated voice
 
 - **Numbers:** in languages other than English, write them as words. A voice can read digits in English. Captions show the spoken words.
@@ -157,6 +169,10 @@ The user's own recordings never pass through it.
 ## Captions
 
 A word-synced caption track: `<div class="captions" data-captions="../out/voice/words.json"></div>`, in every scene that shows it.
+
+- **Ask first:** captions are the user's decision. Ask whether they want burned-in captions, a subtitle file (`.srt`, `.vtt`), both, or neither. Default to neither when the user has not said.
+- **Text-heavy videos:** when the scenes already carry labels, statements and annotations that follow the narration, a caption track repeats them. Leave it out. Keep the bottom band clear only if the user wants subtitles added later.
+- **Subtitle file:** a separate deliverable from the video. Build it from `out/voice/words.json` and the script's words, at most two lines of 42 characters, 1 to 6 s per cue. The video itself stays clean.
 
 - **Lines:** words group into lines of at most `data-max` words (default 3), breaking at punctuation and pauses. A line shows from its first word until the next line.
 - **Highlight:** the spoken word carries `.on` (a pill in `--caption-on`). Every spoken word carries `.said`, for a fill-as-you-speak style.

@@ -8,6 +8,7 @@
 | Kokoro               | `references/tts/kokoro.md`      |
 | A Hugging Face model | `references/tts/huggingface.md` |
 | The user's own TTS   | `references/tts/command.md`     |
+| ElevenLabs (paid)    | `references/tts/elevenlabs.md`  |
 
 ## Pick an engine
 
@@ -33,6 +34,7 @@ With no engine flag or config, `speak` picks the best engine this machine runs: 
 | Kokoro             | 28 named voices                 | `--speed` only                             | Every mark exact                                             | One pass, checked whole               |
 | Hugging Face model | The model's voice               | `--speed` only                             | Every mark exact                                             | One pass, checked whole               |
 | User's TTS         | Whatever the tool offers        | Whatever the tool offers                   | Every mark exact, or none with `--one-call`                  | One pass, checked whole               |
+| ElevenLabs         | The user's voice id             | None: ear punctuation only                 | Every gap exact, set by the template                         | Per piece, cached, tail checked       |
 
 A script feature an engine lacks is dropped for it, never spoken: delivery notes and tags are VoxCPM2 only.
 
