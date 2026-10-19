@@ -7,6 +7,8 @@ import { cueSoundErrors } from './sound-policy.mjs';
 
 // Thresholds. Each one traces to a source in references/craft.md.
 const SAFE = 0.05; // EBU R 95 graphics-safe margin per edge.
+const TALL_TOP = 170 / 1920; // Platform UI of vertical video (Shorts, Reels, TikTok) covers about this much of the top
+const TALL_BOTTOM = 480 / 1920; // and of the bottom of a 9:16 frame.
 const MIN_TEXT = 28 / 1080; // Smallest legible text as a fraction of the short side.
 const READ_WPS = 3; // BBC subtitle guidance: 160-180 words per minute.
 const READ_MIN = 0.8; // Netflix: an event holds at least 20 frames.
@@ -618,8 +620,11 @@ export async function checkScene(browser, m, scene, carry = null) {
         if (it.world && Math.hypot(it.box.l - s.firstBox.l, it.box.t - s.firstBox.t) > 2) s.moved = true;
         if (it.opacity >= 0.9 && !(it.world && it.scale > 1.02)) {
           const mx = SAFE * m.width;
-          const my = SAFE * m.height;
-          if (it.box.l < mx - 1 || it.box.t < my - 1 || it.box.r > m.width - mx + 1 || it.box.b > m.height - my + 1) {
+          // A tall frame (9:16) also keeps clear of the platform bands: the top 170 px and bottom 480 px of 1920.
+          const tall = m.height / m.width >= 1.6;
+          const myTop = (tall ? TALL_TOP : SAFE) * m.height;
+          const myBottom = (tall ? TALL_BOTTOM : SAFE) * m.height;
+          if (it.box.l < mx - 1 || it.box.t < myTop - 1 || it.box.r > m.width - mx + 1 || it.box.b > m.height - myBottom + 1) {
             s.unsafe += step;
             s.unsafeScale = Math.max(s.unsafeScale ?? 0, it.scale);
           }
@@ -677,7 +682,7 @@ export async function checkScene(browser, m, scene, carry = null) {
         add(
           'error',
           null,
-          `Text sits outside the 5% safe area for ${fmt(s.unsafe)}: "${it.text}".${pushed ? ` A camera push or zoom scales it ${s.unsafeScale.toFixed(2)}x at that moment.` : ''}`,
+          `Text sits outside the ${m.height / m.width >= 1.6 ? 'safe area (5% at the sides, the platform bands at the top and bottom)' : '5% safe area'} for ${fmt(s.unsafe)}: "${it.text}".${pushed ? ` A camera push or zoom scales it ${s.unsafeScale.toFixed(2)}x at that moment.` : ''}`,
           pushed ? 'Place the text further inside .safe so it stays inside at full push, or reduce the camera scale. If the push crops the world on purpose, mark the world wrapper data-world.' : 'Keep resting text inside .safe. World text that a pan or push carries past the edge is exempt: mark its wrapper data-world.',
         );
       }

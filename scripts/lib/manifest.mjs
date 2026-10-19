@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { basename, dirname, extname, join, resolve } from 'node:path';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { PALETTES } from './sfx.mjs';
 import { parseKey } from './sound-tuning.mjs';
@@ -26,6 +26,63 @@ export function probeDuration(file) {
   return d;
 }
 
+// The folder a manifest writes to: "outDir" relative to the manifest's folder, default "out". It must sit inside
+// that folder, so several manifests can share one project, each with its own output folder.
+export function outDirOf(path, raw) {
+  const root = dirname(resolve(path));
+  const v = raw?.outDir ?? 'out';
+  const fix = 'Use a relative folder inside the project directory, such as "out" or "out-b".';
+  if (typeof v !== 'string' || !v.trim()) fail(path, `"outDir" is ${JSON.stringify(v)}. ${fix}`);
+  if (isAbsolute(v)) fail(path, `"outDir" "${v}" is an absolute path. ${fix}`);
+  const dir = resolve(root, v);
+  const rel = relative(root, dir);
+  if (!rel || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) fail(path, `"outDir" "${v}" resolves to ${dir}, outside the project directory ${root} or equal to it. ${fix}`);
+  return dir;
+}
+
+// The files a whole render writes next to its "output": the master, the copy without the bed, the compressed copy and
+// the thumbnail. An "output" outside outDir puts them in a project folder, where file walkers must skip them.
+export function outputFiles(output) {
+  return [output, output.replace(/(\.[^./]+)?$/, '.no-bed$1'), output.replace(/(\.[^./]+)?$/, '-compressed.mp4'), join(dirname(output), 'thumbnail.png')];
+}
+
+// Every manifest in a project directory (a top-level .json file with a "scenes" array), the output folder each writes
+// to, and the files its "output" names. File walkers skip all of them, so a render of one manifest never changes the
+// fingerprints of another.
+export function projectOutputs(root) {
+  const manifests = new Set();
+  const outDirs = new Set();
+  const files = new Set();
+  let entries = [];
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return { manifests, outDirs, files };
+  }
+  for (const e of entries) {
+    if (!e.isFile() || !e.name.endsWith('.json')) continue;
+    const p = resolve(root, e.name);
+    let raw;
+    try {
+      raw = JSON.parse(readFileSync(p, 'utf8'));
+    } catch {
+      continue;
+    }
+    if (!Array.isArray(raw?.scenes)) continue;
+    manifests.add(p);
+    let dir;
+    try {
+      dir = outDirOf(p, raw);
+    } catch {
+      // An invalid outDir fails when its manifest loads. Here that manifest has no folder to skip.
+      continue;
+    }
+    outDirs.add(dir);
+    for (const f of outputFiles(typeof raw.output === 'string' ? resolve(root, raw.output) : join(dir, 'video.mp4'))) files.add(f);
+  }
+  return { manifests, outDirs, files };
+}
+
 // voiceoverFits: false lets a voiceover run past the video's end (transcribe needs the new words to size the scenes).
 // The overrun is then reported in `voiceoverOverrun` (seconds) instead of failing.
 export function loadManifest(manifestPath, { voiceoverFits = true } = {}) {
@@ -47,7 +104,7 @@ export function loadManifest(manifestPath, { voiceoverFits = true } = {}) {
   if (!Number.isInteger(fps) || fps < 12 || fps > 120) fail(path, `"fps" is ${fps}. Use an integer from 12 to 120.`);
   if (!Array.isArray(raw.scenes) || raw.scenes.length === 0) fail(path, `"scenes" must be a non-empty array.`);
 
-  const outDir = resolve(root, 'out');
+  const outDir = outDirOf(path, raw);
   let bar = null;
   if (raw.scenes.some((s) => s?.bars != null)) {
     const beatsFile = join(outDir, 'beats.json');
@@ -168,7 +225,7 @@ export function loadManifest(manifestPath, { voiceoverFits = true } = {}) {
     width,
     height,
     fps,
-    output: resolve(root, raw.output ?? 'out/video.mp4'),
+    output: raw.output != null ? resolve(root, raw.output) : join(outDir, 'video.mp4'),
     outDir,
     scenes,
     music,

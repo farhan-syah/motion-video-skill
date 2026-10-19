@@ -6,6 +6,7 @@ import { cpus, freemem, platform, totalmem } from 'node:os';
 import { extname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { blazrInfo } from './blazr.mjs';
+import { projectOutputs } from './manifest.mjs';
 import { cacheRoot, config, configFile, hubCaches, modelsDir } from './paths.mjs';
 
 const first = (cmd, args) => {
@@ -57,6 +58,7 @@ const freeSpace = (dir) => {
 // Media and documents in the folder, two levels deep, skipping build output, dependencies and the skill's own files.
 function material(root) {
   const found = { image: [], video: [], audio: [], font: [], text: [] };
+  const { manifests, outDirs, files } = projectOutputs(root);
   const walk = (dir, depth) => {
     let entries;
     try {
@@ -67,6 +69,7 @@ function material(root) {
     for (const e of entries) {
       if (e.name.startsWith('.') || ['node_modules', 'out', 'fonts', 'lib'].includes(e.name)) continue;
       const p = join(dir, e.name);
+      if (e.isDirectory() ? outDirs.has(p) : files.has(p) || manifests.has(p)) continue;
       if (e.isDirectory()) {
         if (depth < 2) walk(p, depth + 1);
         continue;

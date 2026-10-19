@@ -6,7 +6,7 @@ import { availableParallelism, homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runBlazr } from './lib/blazr.mjs';
-import { ManifestError, AUDIO_LEAD, loadManifest, pickScenes } from './lib/manifest.mjs';
+import { ManifestError, AUDIO_LEAD, loadManifest, outDirOf, pickScenes, projectOutputs } from './lib/manifest.mjs';
 
 const HELP = `Usage: node video.mjs <command> [options]
 
@@ -67,7 +67,7 @@ Commands:
                                  "sfx": false) and writes out/sheet.png, out/thumbnail.png and out/stems/. Only a
                                  non-draft render writes <output>-compressed.mp4. --scene skips all of these.
                                  Exits 1 on a failing cue.
-                                 --draft   half size, JPEG capture, fast encode.
+                                 --draft   half size, JPEG capture, fast encode. Writes out/draft.mp4, never the master.
                                  --scale 2 renders at twice the manifest size (1920x1080 -> 4K).
                                  --jobs N  parallel workers, one browser each. Default: half the CPU threads, at most 12.
                                  --capture jpeg  JPEG q92 frames in a non-draft render: about 35% faster than PNG, files about 50% larger.
@@ -84,6 +84,8 @@ Commands:
 
 Options:
   --manifest PATH                Manifest path. Default: ./video.json
+                                 out/ above is the manifest "outDir" (default "out"), relative to the manifest. Give
+                                 each manifest in one folder its own "outDir", so renders keep apart.
   --scene NAME                   One scene: its name, the number its file name starts with (2 for 02-engines), or its
                                  1-based place when names carry no number. Other scene files can be missing.
 `;
@@ -477,7 +479,7 @@ async function transcribeCmd(m, opts) {
     const { spokenWords } = await import('./lib/voice.mjs');
     const out = join(m.outDir, 'voice', 'words.json');
     writeFileSync(out, JSON.stringify({ words: spokenWords(m).words.map((w) => ({ text: w.text, start: +w.start.toFixed(3), end: +w.end.toFixed(3) })) }, null, 1));
-    console.log(`video timeline -> ${out}  (for <div data-captions="../out/voice/words.json">)`);
+    console.log(`video timeline -> ${out}  (for <div data-captions="../${relative(m.root, out).split('\\').join('/')}">)`);
   }
 }
 
@@ -512,14 +514,28 @@ async function withBrowser(fn) {
   }
 }
 
-// A fingerprint of everything a check reads: every project file outside out/ (path, size, mtime), the picked
-// scenes, and the skill's own scripts. A clean check stores it, and render skips its check while it still matches.
+// What a project's file walkers leave out: dependencies, git, every manifest's output folder and output files, and
+// the other manifests in the folder. Rendering one manifest then never changes another manifest's fingerprints.
+function walkSkip(manifest) {
+  const self = resolve(manifest);
+  const { manifests, outDirs, files } = projectOutputs(dirname(self));
+  return (e, p) => {
+    if (['node_modules', '.git'].includes(e.name)) return true;
+    const abs = resolve(p);
+    if (e.isDirectory()) return outDirs.has(abs);
+    return files.has(abs) || (manifests.has(abs) && abs !== self);
+  };
+}
+
+// A fingerprint of everything a check reads: every project file outside the output folders (path, size, mtime), the
+// picked scenes, and the skill's own scripts. A clean check stores it, and render skips its check while it still matches.
 function checkStamp(opts, scenes) {
   const h = createHash('sha1');
+  const skip = walkSkip(opts.manifest);
   const walk = (dir) => {
     for (const e of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      if (['out', 'node_modules', '.git'].includes(e.name)) continue;
       const p = join(dir, e.name);
+      if (skip(e, p)) continue;
       if (e.isDirectory()) walk(p);
       else {
         const st = statSync(p);
@@ -538,10 +554,11 @@ function checkStamp(opts, scenes) {
 function visualStamp(opts) {
   const h = createHash('sha1');
   const root = dirname(resolve(opts.manifest));
+  const skip = walkSkip(opts.manifest);
   const walk = (dir) => {
     for (const e of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      if (['out', 'node_modules', '.git'].includes(e.name)) continue;
       const p = join(dir, e.name);
+      if (skip(e, p)) continue;
       if (e.isDirectory()) walk(p);
       else if (/\.html?$/.test(e.name)) h.update(`${p}\0${readFileSync(p, 'utf8').replace(/\sdata-sfx[\w-]*(?:=(?:"[^"]*"|'[^']*'|[^\s>]+))?/g, '')}\n`);
       else if (resolve(p) === resolve(opts.manifest)) {
@@ -789,7 +806,8 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs, capt
     fadeIn: Math.min(whole ? dir.fadeIn : 0.05, Math.max(0.02, firstSound)),
     fadeOut: whole ? dir.fadeOut : 0.05,
   };
-  const output = whole ? m.output : join(m.outDir, `${scenes[0].name}.mp4`);
+  // A draft never overwrites the master: it writes out/draft.mp4.
+  const output = whole ? (draft ? join(m.outDir, 'draft.mp4') : m.output) : join(m.outDir, `${scenes[0].name}.mp4`);
   mkdirSync(resolve(output, '..'), { recursive: true });
   // The bed, only on a full render with something in the foreground to sit under.
   const plan = local.map((s) => ({ scene: s.name, start: Number(s.start.toFixed(4)), end: Number((s.start + s.duration).toFixed(4)), energy: s.energy, curve: (s.curve ?? [[0, s.energy]]).map(([t, e]) => [Number((s.start + t).toFixed(4)), e]), in: s.in }));
@@ -807,10 +825,10 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs, capt
     bedLog = { ...dir.bed, from: p.from, reveals: p.reveals, fragments: p.fragments, withoutBed: abOut };
     console.log(`bed: ${p.fragments.length} fragment(s) from the ${p.from} sound(s). Without the bed: ${abOut}`);
   }
-  const fxStem = output === m.output && voice.length && sfx.length ? join(m.outDir, 'voice', 'effects.wav') : null;
+  const fxStem = whole && voice.length && sfx.length ? join(m.outDir, 'voice', 'effects.wav') : null;
   if (fxStem) mkdirSync(dirname(fxStem), { recursive: true });
   // A whole-video render also writes each layer alone (voice, music, effects), to check and listen to apart.
-  const stems = output === m.output ? join(m.outDir, 'stems') : null;
+  const stems = whole ? join(m.outDir, 'stems') : null;
   const level = await muxAudio(joined, output, { voice, sfx, music: whole ? m.music : null, direction, bed, fxStem, stems }, total);
   if (level) {
     console.log(`loudness ${level.loudness.toFixed(1)} LUFS, true peak ${level.truePeak.toFixed(1)} dBTP (target ${level.target} LUFS, ceiling ${level.ceiling} dBTP)`);
@@ -820,7 +838,7 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs, capt
     const keys = sfx.filter((c) => c.sound === 'type').length;
     console.log(`placed ${sfx.length - keys} sound effect(s)${keys ? ` and ${keys} typing key sound(s)` : ''}, space ${dir.space}`);
   }
-  if (output === m.output) {
+  if (whole) {
     const cueLog = sfx.map(({ sound, material, struck, src, intent, layer, motif, target, event, at, d, params, box, accents, file, sourceFile, volume, energy, tone, pan, space }) => ({ sound, material, struck, src, intent, layer, motif, target, event: Number(event.toFixed(4)), start: Number(at.toFixed(4)), d: Number(d.toFixed(4)), params, volume: Number(volume.toFixed(3)), energy: Number(energy.toFixed(3)), tone, pan, space, box, accents, file, sourceFile }));
     const cuts = local.slice(1).map((s) => Number(s.start.toFixed(4)));
     writeFileSync(join(m.outDir, 'cues.json'), JSON.stringify({ video: output, width: m.width, height: m.height, fps: m.fps, cuts, plan, sound: { ...dir, key: key.name }, bed: bedLog, music: !!m.music, cues: cueLog, voice: voice.map((v) => ({ file: v.file, start: v.at })), fxStem: level?.fxStem ?? null, gainDb: level?.gainDb ?? null }, null, 1));
@@ -828,13 +846,13 @@ async function render(m, scenes, { draft, scale: userScale, jobs: userJobs, capt
   rmSync(work, { recursive: true, force: true });
   console.log(`wrote ${output} (${total.toFixed(2)}s, ${Math.round(m.width * scale)}x${Math.round(m.height * scale)} @ ${m.fps}fps)`);
   // The whole video's frame 0 is its thumbnail on most platforms: written beside it, to review as a still.
-  if (output === m.output) {
+  if (whole && !draft) {
     const thumb = join(dirname(output), 'thumbnail.png');
     spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-i', output, '-frames:v', '1', thumb]);
     if (existsSync(thumb)) console.log(`wrote ${thumb} (frame 0, the thumbnail on most platforms)`);
   }
   // A non-draft render of the whole video also writes a compressed copy next to the master, small enough for chat apps and social uploads.
-  if (!draft && output === m.output) {
+  if (!draft && whole) {
     const { compressedCopy } = await import('./lib/encode.mjs');
     const small = output.replace(/(\.[^./]+)?$/, '-compressed.mp4');
     await compressedCopy(output, small);
@@ -1010,10 +1028,15 @@ async function beats(opts) {
   let start = opts.start;
   let outDir = resolve('out');
   if (existsSync(opts.manifest)) {
-    // Reads only the music fields: a manifest using "bars" cannot load before beats.json exists.
+    // Reads only the music fields and outDir: a manifest using "bars" cannot load before beats.json exists.
     const root = dirname(resolve(opts.manifest));
-    const raw = JSON.parse(readFileSync(opts.manifest, 'utf8'));
-    outDir = join(root, 'out');
+    let raw;
+    try {
+      raw = JSON.parse(readFileSync(opts.manifest, 'utf8'));
+    } catch (e) {
+      throw new ManifestError(`${resolve(opts.manifest)}: invalid JSON: ${e.message}`);
+    }
+    outDir = outDirOf(opts.manifest, raw);
     if (raw.music?.file) file ??= resolve(root, raw.music.file);
     start ??= raw.music?.start ?? 0;
   }
@@ -1036,11 +1059,11 @@ ${aligned ? 'start sits on a downbeat: scenes sized in "bars" cut on downbeats.'
 set in base.css :root: --beat: ${r.beat}s;`);
 }
 
-async function sheet(m) {
+async function sheet(m, video = m.output) {
   const { videoSheet } = await import('./lib/encode.mjs');
-  if (!existsSync(m.output)) throw new ManifestError(`${m.output} does not exist. Run render first.`);
+  if (!existsSync(video)) throw new ManifestError(`${video} does not exist. Run render first.`);
   const file = join(m.outDir, 'sheet.png');
-  await videoSheet(m.output, file, m.totalDuration);
+  await videoSheet(video, file, m.totalDuration);
   console.log(`${file}  (16 frames, evenly spaced across ${m.totalDuration.toFixed(2)}s)`);
 }
 
@@ -1183,7 +1206,7 @@ async function main() {
   // A render of the whole video, draft or not, ends with its review: the sound audit and the contact sheet, so one command gives the verdict.
   if (scenes.length < m.scenes.length) return 0;
   const audited = m.sfx ? await audit(m) : 0;
-  await sheet(m);
+  await sheet(m, opts.draft ? join(m.outDir, 'draft.mp4') : m.output);
   return audited;
 }
 
