@@ -18,6 +18,8 @@ The platform sets the aspect ratio, size and length before any scene is written.
 
 Rules that follow from the platform:
 
+- **Vertical safe zones (1080x1920):** platform UI covers about the top 170 px and the bottom 480 px, and the right 120 px at mid height. Put nothing the viewer must read there. Burned-in captions sit just above the bottom band, since most viewers watch muted. YouTube Shorts takes 9:16 up to 3 minutes (fetch the current limit before relying on it), so one master serves Shorts, Reels and TikTok.
+- **A long film as a series:** a film over the platform's reel length splits into standalone parts of 1.5 to 2.5 minutes cut from the same voice. Each part opens with a line that gives its context and ends with a line that names the next part. Build each part as its own project with its own timeline.
 - **Aspect ratio is a design decision.** A change of ratio rebuilds the composition. Scale 16:9 scenes into a vertical frame only for a quick social cut, and say so.
 - **Platform limits change.** Fetch the current limit (length, size, ratio) before promising a delivery. Report any limit the video exceeds.
 - **Several outputs:** render the master once, then derive the rest with ffmpeg from the master. Report each file with its size, resolution and intended platform.
