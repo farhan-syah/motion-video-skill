@@ -51,7 +51,7 @@ Tool: `node <skill-dir>/scripts/video.mjs <command>`, run from the project direc
 | Choosing a TTS engine for a language or machine, adding a voice or model                                                       | `references/tts.md`              |
 | Using one TTS engine: its voice, delivery and writing rules                                                                    | `references/tts/<engine>.md`     |
 | Finding an icon name                                                                                                           | `references/icons.txt` (grep it) |
-| Choosing the output for the user's platform: ratio, size, fps, codec, upload copies. Recording a screen for footage             | `references/delivery.md`         |
+| Choosing the output for the user's platform: ratio, size, fps, codec, upload copies. Listing titles, descriptions, hashtags, series covers. Recording a screen for footage | `references/delivery.md`         |
 | Thresholds, and the visual review of sheets                                                                                    | `references/craft.md`            |
 | Commands, flags, `video.json` fields, setup errors                                                                             | `references/cli.md`              |
 

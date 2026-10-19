@@ -61,6 +61,20 @@ Size estimate in GB: (video Mbps + audio Mbps) × seconds ÷ 8000. Check the rea
 - **Cut the footage into scenes with `footage`**, which keeps the pixels frame-exact. Re-record only when the page itself changed.
 - **A pointer and clicks** read best with the system arrow, a pointing hand on buttons, and a closed hand only while dragging.
 
+## Listing text and covers
+
+The listing title, description, and cover serve search and showcase pages. They need not match titles inside the video or the project files.
+
+- **Files together:** the video, its cover, and its text file sit in one folder with one base name (`part-3-why-it-is-slow.mp4`, `.png`, `.txt`). Fill the text file with real text. Report each unknown, such as the full-film link.
+- **Title:** lead with the result or what the video shows. Name the subject and the measured thing: "X runs the job in 46% less time". Never use a topic label or a bare percentage.
+- **Series title:** `<series name> - <what this video shows> (Part x of N)`. The series name is identical in every title. The user can change it. A full film keeps its own title and joins the playlist.
+- **Length:** YouTube titles stay under 100 characters. Add `#Shorts` to a Shorts title.
+- **Caption and description:** sentences of 20 words or fewer, one idea each, with concrete subjects and no filler. No slogans, fragments, or "not X, but Y" contrasts. Name who does what. Order for a part: title, body, next part, full-film link.
+- **Hashtags:** write two lists. Line one: `#` tags separated by spaces (TikTok, Instagram, Facebook). Line two: tags without `#`, separated by commas (YouTube tags).
+- **Claims:** repeat only what the film supports. A modelled number says so and lists its assumptions. Call a product "open source" only when its licence is.
+- **Chapters:** long YouTube films get timestamps from the final timeline. Start at `0:00`. Use at least three, each at least 10 s.
+- **Covers:** one template per series, so viewers group the videos by sight. Include the series name, a large part number with progress marks, a key frame, the title, and the logo. Keep key content in the middle 4:5 of a vertical cover. Render covers from HTML at delivery size.
+
 ## Captions
 
 A subtitle file (`.srt`, `.vtt`) is a separate deliverable and needs the user's yes. A video with enough on-screen text carries no caption track (`narration.md`, Captions).
