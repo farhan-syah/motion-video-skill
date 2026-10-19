@@ -6,11 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-19
+
 ### Added
 
 - `references/delivery.md`, Listing text and covers: one text file per video, a series title form, two hashtag lists, chapters, and one cover template for a series. It names the vertical safe zones and how to split a long film into standalone parts.
 - `templates/timeline.mjs`, `templates/words.js` and `templates/subtitles.mjs`: scene timing from the narration's words, the `at()` and `data-w` anchors, SRT and VTT files, and YouTube chapter lines. See `references/narration.md`, Scenes that follow the narration.
-- `references/direction.md`, Teaching films: tone, one worked example, spoken-name and copy audits.
 - `video.json` `"outDir"`: the output folder, relative to the manifest, default `out`. Several manifests can share one project directory, each with its own frame cache, check stamp and outputs. The default `output` is `<outDir>/video.mp4`.
 
 ### Changed
@@ -19,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - `check` keeps text in a 9:16 frame clear of the platform bands: the top 170 px and bottom 480 px of 1920.
 - `templates/ui.css` lifts captions to 28% from the bottom in a tall frame, clear of the platform bands.
 - `SKILL.md` picks the platform output in Direct (step 4), not at Deliver.
+- The sound system moved from `references/building.md` to `references/sound.md`. Each duplicated rule has one owner file, and `SKILL.md` keeps routing only.
 - `templates/tts-elevenlabs.mjs` needs `ELEVEN_VOICE`, pauses 0.8 s at a blank line like `speak`, and keeps no project name in its messages.
 
 ### Fixed
@@ -228,7 +230,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Master MP4 and `-compressed.mp4` copy.
 - `doctor`, `version` and `update` commands.
 
-[unreleased]: https://github.com/farhan-syah/motion-video-skill/compare/v1.6.0...HEAD
+[unreleased]: https://github.com/farhan-syah/motion-video-skill/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/farhan-syah/motion-video-skill/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/farhan-syah/motion-video-skill/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/farhan-syah/motion-video-skill/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/farhan-syah/motion-video-skill/compare/v1.4.0...v1.4.1
