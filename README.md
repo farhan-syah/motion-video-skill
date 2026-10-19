@@ -30,7 +30,7 @@ Ask your AI agent:
 1. **Clone:** `git clone https://github.com/farhan-syah/motion-video-skill <skills-folder>/motion-video`. Use the folder your tool loads skills from, else any folder the user picks.
 2. **Install:** `cd <skills-folder>/motion-video/scripts && bun install`, or `npm install` without Bun.
 3. **Check:** run `node scripts/video.mjs doctor` in the user's folder. Fix what it marks missing, or tell the user.
-4. **Speech (optional):** `speak` and `transcribe` run in `blazr` when it is installed (version 0.1.2 or newer, built with the `audio` feature): `cargo install blazr --locked --features audio`. Add `cuda` (`--features audio,cuda`) for VoxCPM2 on an NVIDIA GPU. Building with CUDA needs the CUDA toolkit 12.8 or newer. The CPU builds at https://github.com/ml-rust/blazr/releases need no toolchain. Without blazr, the first `speak` or `transcribe` installs the skill's own speech runtime. Either way, models download once. `"blazr"` in `~/.config/motion-video/config.json` names the binary, and `"blazr": false` turns it off. `"models"` in `~/.config/motion-video/config.json` points at a folder the user keeps.
+4. **Speech (optional):** `speak` and `transcribe` run in `blazr` when it is installed. It needs version 0.1.2 or newer, built with the `audio` feature: `cargo install blazr --locked --features audio`. Add `cuda` (`--features audio,cuda`) for VoxCPM2 on an NVIDIA GPU. Building with CUDA needs the CUDA toolkit 12.8 or newer. The CPU builds at https://github.com/ml-rust/blazr/releases need no toolchain. Without blazr, the first `speak` or `transcribe` installs the skill's own speech runtime. Either way, models download once. `"blazr"` in `~/.config/motion-video/config.json` names the binary, and `"blazr": false` turns it off. `"models"` in `~/.config/motion-video/config.json` points at a folder the user keeps.
 5. **Report** the installed version and anything `doctor` found missing.
 
 **Manual install:** `git clone https://github.com/farhan-syah/motion-video-skill motion-video` into your agent's skills folder, then `cd motion-video/scripts && bun install`. An agent without a skills feature must read `motion-video/SKILL.md` before it makes a video.
@@ -69,6 +69,7 @@ Output: `out/video.mp4` (master) and `out/video-compressed.mp4`, about a quarter
 | Kokoro                  | English                                             | Any, CPU only included           |
 | Any Hugging Face model  | The model's, when its license allows commercial use | Any, CPU only included. VITS safetensors run in blazr, others need `uv` |
 | Any TTS you already use | The tool's                                          | Wherever it runs                 |
+| ElevenLabs (paid)       | The account's voices and models                     | Any. A template, not a `speak` engine |
 
 The default is the best one your machine runs: VoxCPM2 with that GPU, else Kokoro. `node scripts/video.mjs doctor` shows which of these your machine runs. Languages, hardware and adding your own voice or model: `references/tts.md`.
 
@@ -82,8 +83,8 @@ The agent runs `node scripts/video.mjs <command>` from the project folder. You c
 | -------------- | --------------------------------------------------------------------------------------------------- |
 | `SKILL.md`     | The workflow the agent follows                                                                      |
 | `CHANGELOG.md` | What each version adds                                                                              |
-| `references/`  | Direction, concepts, building, craft thresholds, styles, narration, text to speech, CLI, icon index |
-| `templates/`   | What `init` copies into a project: CSS kit, runtime, fonts, icons, scene and direction templates    |
+| `references/`  | Direction, concepts, building, sound, craft thresholds, styles, narration, text to speech, delivery, CLI, icon index |
+| `templates/`   | CSS kit, runtime, fonts, icons, scene and direction templates, which `init` copies. Copy `tts-elevenlabs.mjs`, `timeline.mjs`, `words.js` and `subtitles.mjs` by hand. |
 | `scripts/`     | The CLI, renderer, linter, sound synthesis and audit                                                |
 | `scripts/dev/` | Tools for editing the sound catalog                                                                 |
 

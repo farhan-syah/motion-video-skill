@@ -6,7 +6,7 @@
 //
 // Reads  ear.txt (spoken script) and script.txt (written script), one paragraph per blank-line block.
 //        Pauses in ear.txt, the same marks as the motion-video skill:
-//          blank line         0.75 s between paragraphs (1.05 s after a question)
+//          blank line         0.8 s between paragraphs (1.1 s after a question)
 //          line break         0.45 s breath, and a new take
 //          [pause] [pause N]  0.6 s or exactly N s, and a new take
 //          [section]          a block of its own at a chapter change: 0.8 s more silence after the take before it
@@ -15,11 +15,11 @@
 // Writes assets/voiceover.wav (48 kHz mono), assets/voiceover.txt (the written words, for `transcribe`),
 //        assets/voiceover.plan.json (take file, text, start time and length of every take).
 // Key:   $ELEVENLABS_API_KEY, else .env, else the first line of ~/.config/elevenlabs/api_key. It is never printed.
-// Env:   ELEVEN_VOICE (default Adam Stone), ELEVEN_MODEL, ELEVEN_FORMAT, ELEVEN_STABILITY, ELEVEN_SIMILARITY,
-//        ELEVEN_STYLE, ELEVEN_SPEED, ELEVEN_SEED, ELEVEN_PAUSE, ELEVEN_LINE_PAUSE, ELEVEN_RETRY, ELEVEN_TAIL_OK.
+// Env:   ELEVEN_VOICE (required), ELEVEN_MODEL, ELEVEN_FORMAT, ELEVEN_STABILITY, ELEVEN_SIMILARITY,
+//        ELEVEN_STYLE, ELEVEN_SPEED, ELEVEN_SEED, ELEVEN_PAUSE, ELEVEN_LINE_PAUSE, ELEVEN_RETRY, ELEVEN_TAIL_OK, ELEVEN_FADE_OUT.
 //
 // Why exact silence: a model's own pause at a full stop is short and uneven, and `<break>` tags work only on the
-// older models (not on Eleven v3), so a list of short sentences runs together. Separate takes always pause.
+// older models (not on Eleven v3 or v4), so a list of short sentences runs together. Separate takes always pause.
 import { createHash } from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -27,7 +27,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 const DRY = process.argv.includes("--dry");
-const VOICE = process.env.ELEVEN_VOICE ?? "auq43ws1oslv0tO4BDa7"; // Adam Stone
+const VOICE = process.env.ELEVEN_VOICE;
+if (!VOICE) throw new Error("ELEVEN_VOICE is not set. Pass the voice id the user chose: ELEVEN_VOICE=<id> node tools/tts-elevenlabs.mjs");
 const MODEL = process.env.ELEVEN_MODEL ?? "eleven_v4";
 const FORMAT = process.env.ELEVEN_FORMAT ?? "mp3_44100_128";
 const SETTINGS = {
@@ -38,7 +39,7 @@ const SETTINGS = {
   use_speaker_boost: true,
 };
 const SEED = Number(process.env.ELEVEN_SEED ?? 7);
-const PAUSE = Number(process.env.ELEVEN_PAUSE ?? 0.75);
+const PAUSE = Number(process.env.ELEVEN_PAUSE ?? 0.8);
 const PAUSE_AFTER_QUESTION = PAUSE + 0.3;
 const LINE_PAUSE = Number(process.env.ELEVEN_LINE_PAUSE ?? 0.45);
 const MARK_PAUSE = 0.6;
@@ -108,7 +109,7 @@ function apiKey() {
   }
   const f = join(homedir(), ".config/elevenlabs/api_key");
   if (existsSync(f)) return readFileSync(f, "utf8").split("\n")[0].trim();
-  throw new Error("No ElevenLabs key. Put it in explainer/.env as ELEVENLABS_API_KEY=..., or set $ELEVENLABS_API_KEY.");
+  throw new Error("No ElevenLabs key. Put it in the project's .env as ELEVENLABS_API_KEY=..., or set $ELEVENLABS_API_KEY.");
 }
 
 const duration = (file) => Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file], { encoding: "utf8" }));

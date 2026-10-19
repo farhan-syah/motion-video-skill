@@ -6,6 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Added
+
+- `references/delivery.md`, Listing text and covers: one text file per video, a series title form, two hashtag lists, chapters, and one cover template for a series. It names the vertical safe zones and how to split a long film into standalone parts.
+- `templates/timeline.mjs`, `templates/words.js` and `templates/subtitles.mjs`: scene timing from the narration's words, the `at()` and `data-w` anchors, SRT and VTT files, and YouTube chapter lines. See `references/narration.md`, Scenes that follow the narration.
+- `references/direction.md`, Teaching films: tone, one worked example, spoken-name and copy audits.
+- `video.json` `"outDir"`: the output folder, relative to the manifest, default `out`. Several manifests can share one project directory, each with its own frame cache, check stamp and outputs. The default `output` is `<outDir>/video.mp4`.
+
+### Changed
+
+- `render --draft` writes `out/draft.mp4`, never the master. The thumbnail and the compressed copy come from a full render only.
+- `check` keeps text in a 9:16 frame clear of the platform bands: the top 170 px and bottom 480 px of 1920.
+- `templates/ui.css` lifts captions to 28% from the bottom in a tall frame, clear of the platform bands.
+- `SKILL.md` picks the platform output in Direct (step 4), not at Deliver.
+- `templates/tts-elevenlabs.mjs` needs `ELEVEN_VOICE`, pauses 0.8 s at a blank line like `speak`, and keeps no project name in its messages.
+
+### Fixed
+
+- `references/delivery.md` said the `-compressed.mp4` copy is 1080p. It keeps the master's size.
+
 ## [1.6.0] - 2026-10-19
 
 ### Added

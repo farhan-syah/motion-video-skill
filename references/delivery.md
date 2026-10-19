@@ -1,10 +1,12 @@
 # Delivery: recording, export and upload
 
-For a video that goes to YouTube or social platforms. Platforms re-encode every upload, so the goal is the cleanest source at a resolution that earns their better playback encodes, without an oversized file.
+For a video that goes to YouTube or social platforms. Platforms re-encode every upload. The goal is the cleanest source at a resolution that earns their better playback encodes. The file stays no larger than that needs.
+
+**Values that age:** platform limits, safe zones, bitrates and codec behavior change without notice. Every such value below was read before October 2026 and is unconfirmed since. Fetch the current value from the platform's own help pages before you promise a delivery. Report any limit the video exceeds.
 
 ## Choose the output for the platform
 
-The platform sets the aspect ratio, size and length before any scene is written. Ask where the video plays (`SKILL.md`, step 3). When the user does not say, propose the default below with its reason and let them change it. A video for several platforms gets one master in the widest format, plus a derived copy for each other.
+The platform sets the aspect ratio, size and length before any scene is written. Ask where the video plays (`direction.md`, Ask the user). When the user does not say, propose the default below with its reason and let them change it. A video for several platforms gets one master in the widest format, plus a derived copy for each other.
 
 | Platform | Aspect, size | Notes |
 | -------- | ------------ | ----- |
@@ -18,10 +20,20 @@ The platform sets the aspect ratio, size and length before any scene is written.
 
 Rules that follow from the platform:
 
-- **Vertical safe zones (1080x1920):** platform UI covers about the top 170 px and the bottom 480 px, and the right 120 px at mid height. Put nothing the viewer must read there. Burned-in captions sit just above the bottom band, since most viewers watch muted. YouTube Shorts takes 9:16 up to 3 minutes (fetch the current limit before relying on it), so one master serves Shorts, Reels and TikTok.
-- **A long film as a series:** a film over the platform's reel length splits into standalone parts of 1.5 to 2.5 minutes cut from the same voice. Each part opens with a line that gives its context and ends with a line that names the next part. Build each part as its own project with its own timeline.
+- **Vertical safe zones (1080x1920, read before October 2026):** platform UI covers these bands. Put nothing the viewer must read there.
+  - The top 170 px.
+  - The bottom 480 px.
+  - The right 120 px at mid height.
+- **Burned-in captions** sit above the bottom band, since most viewers watch muted.
+- **Shorts length:** YouTube Shorts took 9:16 up to 3 minutes when read (before October 2026). Fetch the current limit before relying on it. With that limit, one 9:16 master serves Shorts, Reels and TikTok.
+- **A long film as a series:** a film over the platform's reel length splits into standalone parts.
+  - **Length:** 1.5 to 2.5 minutes per part, cut from the same voice.
+  - **Open and close:** each part opens with a line that gives its context. It ends with a line that names the next part.
+  - **Projects:** build each part as its own project directory with its own timeline.
+  - **Shared kit:** link the CSS, `lib/`, `fonts/` and assets with symlinks. Edit them only in the source project.
+  - **Voice:** cut each part's voice from the film's takes, or with `ffmpeg -ss A -to B`. Write its script, and run `transcribe`.
 - **Aspect ratio is a design decision.** A change of ratio rebuilds the composition. Scale 16:9 scenes into a vertical frame only for a quick social cut, and say so.
-- **Platform limits change.** Fetch the current limit (length, size, ratio) before promising a delivery. Report any limit the video exceeds.
+- **Platform limits change:** see Values that age, above.
 - **Several outputs:** render the master once, then derive the rest with ffmpeg from the master. Report each file with its size, resolution and intended platform.
 
 ## Rules
@@ -31,22 +43,30 @@ Rules that follow from the platform:
 - **Master in H.264** as `render` writes it (High, yuv420p, BT.709, faststart). Keep the master. Derive every upload copy from it, never from another copy.
 - **One resize at most.** Each scaling step softens text. Capture at native size, then scale once, with `lanczos`.
 - **Text survives compression only when large.** Keep the 28 px minimum from `craft.md`. Avoid sharpening: halos around text grow after re-encoding.
-- **Audio:** AAC 192 kbps, 48 kHz, -14 LUFS (the render already normalizes).
+- **Audio:** AAC 192 kbps, 48 kHz, -14 LUFS with a voice or music. An effects-only mix targets -18 LUFS. The render normalizes either.
 
 ## Which resolution
 
 | Target | Size | Why |
 | ------ | ---- | --- |
-| YouTube, default | 2560x1440, 60 fps | Reported to receive VP9 playback encodes more often than 1080p. Text stays sharper. |
-| YouTube, smaller upload | 2048x1152 | Only 14% more pixels than 1080p. Reported to trigger VP9. Community-observed, not a YouTube guarantee. |
+| YouTube, default | 2560x1440, 60 fps | Reported before October 2026 to receive VP9 playback encodes more often than 1080p. Text stays sharper. |
+| YouTube, smaller upload | 2048x1152 | Only 14% more pixels than 1080p. Reported before October 2026 to trigger VP9. Community-observed, not a YouTube guarantee. |
 | YouTube, maximum | 3840x2160 | `render --scale 2`. Large source, long processing. |
-| Facebook, chat, review | 1920x1080 | The `-compressed.mp4` copy from `render`. |
+| Facebook, chat, review | 1920x1080 | The `-compressed.mp4` copy from `render`. It keeps the master's size, so render at 1920x1080. |
 
 YouTube chooses the playback codec. No upload setting forces VP9 or AV1. After processing ends, open the video, right-click the player, choose Stats for nerds and read Codecs: `avc1` is H.264, `vp09` is VP9, `av01` is AV1. If `avc1` remains at 2048x1152, try 2560x1440. The 8K-segment trick for AV1 is experimental and can break the upload: do not use it.
 
 ## Upload copy
 
-YouTube accepts the H.264 master as is. Its published H.264 SDR upload bitrates are 8 Mbps (30 fps) and 12 Mbps (60 fps) at 1080p, 16 and 24 Mbps at 1440p, 35 to 45 and 53 to 68 Mbps at 4K. A smaller HEVC copy, made from the master on an NVIDIA GPU:
+YouTube accepts the H.264 master as is. Its published H.264 SDR upload bitrates, read before October 2026, are below. Fetch the current table from YouTube's help center before relying on them.
+
+| Size  | 30 fps        | 60 fps        |
+| ----- | ------------- | ------------- |
+| 1080p | 8 Mbps        | 12 Mbps       |
+| 1440p | 16 Mbps       | 24 Mbps       |
+| 4K    | 35 to 45 Mbps | 53 to 68 Mbps |
+
+A smaller HEVC copy, made from the master on an NVIDIA GPU:
 
 ```
 ffmpeg -i out/video.mp4 -c:v hevc_nvenc -preset p6 -rc vbr -cq 20 -b:v 0 -pix_fmt yuv420p -tag:v hvc1 -colorspace bt709 -color_primaries bt709 -color_trc bt709 -c:a copy -movflags +faststart out/video-youtube.mp4
@@ -57,18 +77,34 @@ Size estimate in GB: (video Mbps + audio Mbps) × seconds ÷ 8000. Check the rea
 ## Recording a screen (demos, footage)
 
 - **Capture at the monitor's native size** and frame rate. Do not capture at a size the page then scales.
-- **Quality-based rate control, not a fixed bitrate.** In OBS: Matroska (.mkv), NVENC HEVC, CQP 19 to 21, keyframe interval 2 s, preset P5, two-pass, adaptive quantization on, B-frames 2, NV12, Rec. 709, limited range. The RTX 30 series has no hardware AV1 encoder.
+- **Quality-based rate control, not a fixed bitrate.** OBS settings:
+
+  | Setting                | Value                            |
+  | ---------------------- | -------------------------------- |
+  | Container              | Matroska (.mkv)                  |
+  | Encoder                | NVENC HEVC                       |
+  | Rate control           | CQP 19 to 21                     |
+  | Keyframe interval      | 2 s                              |
+  | Preset                 | P5, two-pass                     |
+  | Adaptive quantization  | On                               |
+  | B-frames               | 2                                |
+  | Color                  | NV12, Rec. 709, limited range    |
+
+- **AV1:** the RTX 30 series has no hardware AV1 encoder.
 - **Cut the footage into scenes with `footage`**, which keeps the pixels frame-exact. Re-record only when the page itself changed.
-- **A pointer and clicks** read best with the system arrow, a pointing hand on buttons, and a closed hand only while dragging.
+- **A pointer and clicks:**
+  - The system arrow for moves.
+  - A pointing hand on buttons.
+  - A closed hand only while dragging.
 
 ## Listing text and covers
 
 The listing title, description, and cover serve search and showcase pages. They need not match titles inside the video or the project files.
 
-- **Files together:** the video, its cover, and its text file sit in one folder with one base name (`part-3-why-it-is-slow.mp4`, `.png`, `.txt`). Fill the text file with real text. Report each unknown, such as the full-film link.
+- **Files together:** the video, its cover, and its text file share one folder and one base name. Use `<base>.mp4`, `<base>.png` and `<base>.txt`. Fill the text file with real text. Report each unknown, such as the full-film link.
 - **Title:** lead with the result or what the video shows. Name the subject and the measured thing: "X runs the job in 46% less time". Never use a topic label or a bare percentage.
 - **Series title:** `<series name> - <what this video shows> (Part x of N)`. The series name is identical in every title. The user can change it. A full film keeps its own title and joins the playlist.
-- **Length:** YouTube titles stay under 100 characters. Add `#Shorts` to a Shorts title.
+- **Length:** YouTube titles stay under 100 characters (the limit when read, before October 2026). Add `#Shorts` to a Shorts title.
 - **Caption and description:** sentences of 20 words or fewer, one idea each, with concrete subjects and no filler. No slogans, fragments, or "not X, but Y" contrasts. Name who does what. Order for a part: title, body, next part, full-film link.
 - **Hashtags:** write two lists. Line one: `#` tags separated by spaces (TikTok, Instagram, Facebook). Line two: tags without `#`, separated by commas (YouTube tags).
 - **Claims:** repeat only what the film supports. A modelled number says so and lists its assumptions. Call a product "open source" only when its licence is.
@@ -77,4 +113,4 @@ The listing title, description, and cover serve search and showcase pages. They 
 
 ## Captions
 
-A subtitle file (`.srt`, `.vtt`) is a separate deliverable and needs the user's yes. A video with enough on-screen text carries no caption track (`narration.md`, Captions).
+Captions and subtitle files need the user's yes (`narration.md`, Captions).

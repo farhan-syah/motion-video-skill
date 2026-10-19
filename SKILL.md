@@ -13,27 +13,25 @@ Tool: `node <skill-dir>/scripts/video.mjs <command>`, run from the project direc
 
 1. **Sweep.** Run `doctor` in the user's folder. Fix each MISSING line under READY, or tell the user. Plan around each LIMIT line. If it says an update check is due, tell the user once. Update only with their consent (README, Versions and updates). Plan with what exists: a software-only machine keeps 3D and blur light. An English-only voice never narrates another language.
 2. **Gather facts** from the user's material first. Research only the gaps. Write the facts with sources before anything else (`references/direction.md`, §0). Every claim on screen comes from them.
-3. **Ask, when it matters.** If answers change the video, ask in one message. At most five questions, each with your default. Topics: purpose and audience, platform (where it plays: YouTube, Facebook, Instagram, TikTok, LinkedIn, X, a website, a talk or a chat), format and length, voice (recording, TTS, language, none), captions (burned in, a subtitle file, or none), must-appear items (logo, assets, call to action), tone. Skip asking when the brief answers them or the user wants a one-shot. Also skip when no user is present (scheduled or delegated run). Name the defaults used in the summary.
-4. **Direct.** Run `init <dir>` in the user's working directory, never inside `<skill-dir>`. It writes a placeholder `scenes/01-hook.html` and a `video.json` with that one 3 s scene: replace both with the planned scenes. Fill `<dir>/direction.md` per `references/direction.md` and `references/styles.md`. Write three concepts with different story shapes and compositions (`references/concepts.md`), then pick the strongest. Design the world too: place, objects, graphic system. Give the user a 5-line summary, then continue without waiting.
-5. **Sound.** Voice, music and effects combine as the video needs. The mix ducks music and effects under a voice.
-   - **Voice:** use the user's narration as given. Before writing a script for text to speech, pick the engine and read its guide (`references/tts/<engine>.md`): marks, notes and tags behave per engine. Then prepare the script for speech (`references/narration.md`, Prepare the script for speech). Every case, `speak`, `transcribe`, `data-captions` and `data-say`: `references/narration.md`. Captions: never add a caption track on your own. Burned-in captions and subtitle files need the user's yes. A video with enough on-screen text carries no caption track, and a subtitle file stays a separate deliverable (`references/narration.md`, Captions).
-   - **Music:** only the user's own track. Never add music the user did not supply. Run `beats` and size scenes in `bars`.
-   - **Motion effects:** on by default. Each cue gets a visible-action `data-sfx-intent` (`references/building.md`, Sound). Under narration: at most 2 per scene, in pauses, only for a reason the voice does not give. Often none. Under music: few, on moments the music does not mark.
+3. **Ask, when it matters.** Ask once, in one message, per `references/direction.md`, Ask the user. Skip it for a one-shot or a run with no user.
+4. **Direct.** Run `init <dir>` in the user's working directory, never inside `<skill-dir>`. Replace its placeholder scene (`references/building.md`, Project layout). Fill `<dir>/direction.md` per `references/direction.md` and `references/styles.md`. Write three concepts, then pick the strongest (`references/concepts.md`). Pick ratio, size and fps for the platform now (`references/delivery.md`). Give the user a 5-line summary, then continue without waiting.
+5. **Sound.** Voice, music and effects combine as the video needs. Write the sonic concept and energy arc first (`references/direction.md`, §4).
+   - **Voice:** use the user's narration as given. For text to speech, follow `references/narration.md`, Prepare the script for speech.
+   - **Captions:** never add captions or a subtitle file without the user's yes (`references/narration.md`, Captions).
+   - **Music:** only the user's own track. Run `beats` and size scenes in `bars`.
+   - **Motion effects:** on by default. Cue them per `references/sound.md`, with its caps under a voice or music.
    - **Silence:** on request, `"sfx": false` and no voice or music.
-
-   Write the sonic concept and the energy arc before cueing single sounds (`references/direction.md`, §4).
-
 6. **Build** the scenes per `references/building.md`. Rebuild reference designs as live HTML. Never animate a flat screenshot of a design you can rebuild.
 7. **Check each scene.** After writing or editing a scene, run `check --scene N`. Open its still sheet with Read and fix what fails `references/craft.md`. Fix every finding of a pass in one edit before running again. A warning stays only for a deliberate choice.
 8. **Render.** Run `render --draft` once every scene passes, and again after each fix. Run the full `render` once the draft passes review. With a `sound.bed`, compare the no-bed copy, or tell the user to.
 9. **Review.** `render` already ran `audit` and wrote `out/sheet.png` and, with effects, `out/audit.png`. Read its output and open both. Never run `audit` alone after a render. A sound-only fix needs `render` again: `audit` reads the `out/cues.json` that `render` writes. Compare each cue's intent with its thumbnail. Fix each failing cue and false intent label, then render again. Listen to the mix when playback is available, and report when it was not.
-10. **Deliver.** Open `out/thumbnail.png` (frame 0) and check it reads as a thumbnail. Report the master, the `-compressed.mp4` copy and the thumbnail. Match the output to the platform the user named: size, aspect ratio, frame rate and upload copy per `references/delivery.md`. Propose the choice and the reason in one line, and let the user change it before the full render.
+10. **Deliver.** Check `out/thumbnail.png` per `references/craft.md`, Final pass. Report the master, the `-compressed.mp4` copy and the thumbnail. Make the upload copies and the listing text per `references/delivery.md`.
 
 ## Non-negotiables
 
 - One visual language per video: shared type, icon family, light and camera language. Places can change by chapter inside one palette family.
 - A concept, not a template: story shape, compositions and copy system come from this product. Vary the composition from beat to beat.
-- The skill supplies tools, not the idea. Reference tables show range, never a menu. The kit is a floor: build beyond it when the concept needs more (`references/building.md`, Beyond CSS).
+- The skill supplies tools, not the idea. Reference tables show range, never a menu. The kit is a floor. Build beyond it when the concept needs more (`references/building.md`, Beyond CSS).
 - No dead frame: the content carries the motion. The camera moves only with a reason, never a push-in on every scene.
 - Screen text holds still while the camera moves the world under it. World text moves with the world.
 - Every feature is shown by a verb moment, never a bullet list.
@@ -47,11 +45,12 @@ Tool: `node <skill-dir>/scripts/video.mjs <command>`, run from the project direc
 | Choosing the concept: story shapes, beats, compositions, craft devices, design vocabulary                                      | `references/concepts.md`         |
 | Choosing or executing a visual style                                                                                           | `references/styles.md`           |
 | Writing scenes, the kit (icons, atmospheres, UI parts, leader lines), 3D, footage and libraries, the seek contract, the camera | `references/building.md`         |
+| Sound effects, cues, intents, the mix under a voice or music, materials, key, user sounds                                      | `references/sound.md`            |
 | Voiceover, text to speech, word timing, captions                                                                               | `references/narration.md`        |
 | Choosing a TTS engine for a language or machine, adding a voice or model                                                       | `references/tts.md`              |
 | Using one TTS engine: its voice, delivery and writing rules                                                                    | `references/tts/<engine>.md`     |
 | Finding an icon name                                                                                                           | `references/icons.txt` (grep it) |
-| Choosing the output for the user's platform: ratio, size, fps, codec, upload copies. Listing titles, descriptions, hashtags, series covers. Recording a screen for footage | `references/delivery.md`         |
+| Output for a platform (ratio, size, fps, codec, upload copies), listing text and covers, screen recording                      | `references/delivery.md`         |
 | Thresholds, and the visual review of sheets                                                                                    | `references/craft.md`            |
 | Commands, flags, `video.json` fields, setup errors                                                                             | `references/cli.md`              |
 

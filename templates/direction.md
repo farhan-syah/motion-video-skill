@@ -13,6 +13,7 @@ From the user's brief and files first, then research for the gaps. One line each
 - **Asked for:** <the user's words, verbatim>
 - **Product and promise:** <what it does, and the one sentence the viewer must remember>
 - **Format:** <W>x<H> @ <fps>fps, <seconds>s, <language of on-screen copy>
+- **Platform and captions:** <where it plays, the output size for it (`references/delivery.md`), and the captions choice: burned in, a subtitle file, or none>
 - **Assets:** <every supplied file and its role, or none>
 - **Subject:** <what the product is shown working on: supplied material, its own material, or a generic kind. No other brand appears as a title.>
 - **Invented:** <anything made up because it was missing: logo, palette, sample figures — or none>
@@ -32,7 +33,7 @@ From the user's brief and files first, then research for the gaps. One line each
 
 ## Sound
 
-- **Mode:** <user music | motion effects | none>
+- **Mode:** <voiceover | user music | motion effects | none, or a mix>
 - **Concept:** <material, motif sound, mood shift, room, bed or none>
 - **Arc:** <energy per scene, with the curve where a scene teases and hits>
 

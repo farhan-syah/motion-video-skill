@@ -1,6 +1,6 @@
 # The user's own TTS
 
-`speak --command "<template>"` runs any text-to-speech tool: a local CLI (Piper, XTTS, F5), a cloud service's CLI, a quantized runner, or a small script. Use it whenever the user already has a TTS or a paid voice.
+`speak --command "<template>"` runs any text-to-speech tool. That can be a local CLI (Piper, XTTS, F5), a cloud service's CLI, a quantized runner, or a small script. Use it whenever the user already has a TTS or a paid voice.
 
 ## The template
 

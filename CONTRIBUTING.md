@@ -19,12 +19,12 @@ A toolkit an AI agent uses to direct and render a video. The skill supplies tool
 ## What we do not accept
 
 - **Vendor lock:** code or docs that assume one AI vendor, one agent tool, or one cloud service.
-- **Network during a render:** fetches belong only in setup commands (`font`, `lib`, `speak` model downloads, `update`), never in `check`, `render` or `audit`.
+- **Network during a render:** fetches belong only in setup commands: `font`, `lib`, `speak` model downloads, `update`. They never run in `check`, `render` or `audit`.
 - **Telemetry,** analytics, or any call home.
 - **Creative defaults:** a preset palette, a signature font, a stock sound on every video, or a template layout.
 - **Brands:** another company's name, logo, palette or type used as a default or an example.
 - **Generated live-action footage,** or voice cloning without the speaker's consent.
-- **Restrictive licenses:** a model, voice, font, sound or asset whose license bars commercial use or restricts its outputs, as a default, a recommendation or an example.
+- **Restrictive licenses:** a model, voice, font, sound or asset whose license bars commercial use or restricts its outputs. This holds for a default, a recommendation and an example.
 - **Heavy dependencies** for a small gain. A new package needs a reason the existing ones cannot meet.
 
 ## How to send a change
@@ -39,8 +39,26 @@ A toolkit an AI agent uses to direct and render a video. The skill supplies tool
 ## Style
 
 - **Code:** plain JavaScript modules for Node 20+. Match the surrounding code. A comment says why, never what.
-- **Writing:** short sentences in the present tense, one fact per sentence. No should, may, might or could. No simply, just or easily. Commands and paths exactly as typed. Examples are generic, never from one project.
+- **Writing:** short sentences in the present tense, one fact per sentence.
+  - **Length:** an instruction at most 15 words, an explanation at most 20. Split a longer one.
+  - **Modals:** only can, will and must. No should, may, might, would or could.
+  - **Banned words:** no simply, just, easily, robust, powerful, comprehensive, essential, leverage, utilize, ensure, verify or confirm. Write check, error and config.
+  - **Lists:** bullets or tables, never a prose list. No semicolons in prose.
+  - **Values that age:** a platform limit, bitrate or "current model" carries its read date, or says to fetch it.
+  - **One owner per rule:** a rule lives in one file. Other files link to it in one clause.
+  - **Verbatim:** commands and paths exactly as typed.
+  - **Examples:** generic, never from one project.
 - **Commits:** an imperative subject line that says what changed ("Place appearance sounds on their fastest change").
+
+## Opt-in templates
+
+A template can use a paid cloud service when all of these hold:
+
+- `init` never copies it.
+- The docs say it is opt-in.
+- The default path needs no account.
+
+`templates/tts-elevenlabs.mjs` follows this rule.
 
 ## Releases
 

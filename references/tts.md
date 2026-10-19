@@ -38,7 +38,7 @@ With no engine flag or config, `speak` picks the best engine this machine runs: 
 
 A script feature an engine lacks is dropped for it, never spoken: delivery notes and tags are VoxCPM2 only.
 
-Every engine's output gets the voice polish: loudness evened sentence by sentence, gentle compression, de-essing, and normalizing to a -1 dB peak (`narration.md`, Voice polish). It never changes the pace. The user's own recordings are never changed.
+Every `speak` engine's output gets the voice polish (`narration.md`, Voice polish). It evens loudness sentence by sentence, compresses gently, de-esses, and normalizes to a -1 dB peak. It never changes the pace. The ElevenLabs template applies only fades. The user's own recordings are never changed.
 
 ## Steps for any engine
 
@@ -63,7 +63,7 @@ Set once in `~/.config/motion-video/config.json`. Flags override it.
 
 ## Speech check across languages
 
-`speak` hears every take back with Whisper, which covers about 99 languages. Pass `--language` with the script's language. For a language Whisper does not know, the check cannot judge the take: listen instead, and report that the check could not run.
+`speak` hears every take back with Whisper, which covers about 99 languages. Pass `--language` with the script's language. For a language Whisper does not know, the check cannot judge the take. Listen instead, and report that the check cannot run.
 
 ## Add a voice or a language
 

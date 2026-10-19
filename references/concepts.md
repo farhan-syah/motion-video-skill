@@ -22,13 +22,16 @@ The tables show range from strong product videos, not a menu. Blend, twist or ig
 | Stat → mechanism → result | A number the brief supplies, then how the product moves it, then the result rising.                                                                                                            | Products with a proven result               |
 | Manifesto                 | Kinetic words carry the whole piece, one idea per beat, with almost no UI.                                                                                                                     | Launches, announcements, brands             |
 | Motif journey             | One object changes state through every beat and becomes the end card.                                                                                                                          | Processes and pipelines                     |
-| Chaptered walkthrough     | A question hook and a logo lockup, then one numbered chapter per feature: kicker, two-line headline, the phone doing it, callouts pinned to its rows. A recap grid, plans, the store end card. | Apps with many features, 45–90 s explainers |
+| Chaptered walkthrough     | A question hook and a logo lockup. Then one numbered chapter per feature: kicker, two-line headline, the phone doing it, callouts pinned to its rows. A recap grid, plans, the store end card. | Apps with many features, 45–90 s explainers |
 
 ## Beats and pacing
 
 - **Beat:** one idea on screen, 1.5–4 s long. A 30 s teaser holds 10–15 beats. One scene file can hold several.
 - **Rhythm:** vary beat length. Quick bursts build toward a longer hold on the key beat.
-- **Continuity:** carry the eye from beat to beat: a word morphs into the next line, a card slides to its new place, a color floods the frame.
+- **Continuity:** carry the eye from beat to beat.
+  - A word morphs into the next line.
+  - A card slides to its new place.
+  - A color floods the frame.
 - **Hook and end card:** `direction.md`, §4.
 
 ## Compositions (examples)
@@ -49,7 +52,7 @@ Vary the composition from beat to beat. Take one from this table or invent one f
 | Split               | Two states side by side: before and after, question and answer                                     |
 | Timeline            | A path with pins, walked step by step                                                              |
 | Logo reveal         | The lockup builds with a burst, glow or light sweep                                                |
-| Callout walkthrough | A device on one side, callout cards on the other, joined to its rows by leader lines one at a time |
+| Callout walkthrough | A device on one side, callout cards on the other. Leader lines join them to its rows, one at a time. |
 | Feature grid        | Every feature as an icon tile with a name, landing tile by tile. A recap before the end card.      |
 | Plans               | Tier cards side by side. The recommended one is outlined, with a ribbon, and its checklist builds. |
 | Diorama             | An isometric island of props: a laptop with the UI, coin stacks, papers, a mascot on a ring pad    |
@@ -57,11 +60,18 @@ Vary the composition from beat to beat. Take one from this table or invent one f
 
 ## Craft devices (examples)
 
-- **Kinetic type:** word-by-word reveals, a strike-through that corrects a line, a highlighter swipe, a hand-drawn circle around a word, a slot-machine counter, a search bar typing.
+- **Kinetic type:**
+  - Word-by-word reveals.
+  - A strike-through that corrects a line.
+  - A highlighter swipe, or a hand-drawn circle around a word.
+  - A slot-machine counter, or a search bar typing.
 - **Stickers and badges:** a tilted "FREE", "NEW" or "HUNDREDS" slapped onto a card.
-- **Caption track:** with no voiceover, one plain narration line per beat along the bottom, key word in the accent. The visuals above can stay nearly wordless.
+- **Caption track:** with no voiceover, one plain narration line per beat along the bottom, key word in the accent. The visuals above can stay nearly wordless. Consent: `narration.md`, Captions.
 - **Color moment:** the frame floods to the accent color for the brand reveal, then returns.
-- **Type as a device:** a word that changes weight, width or family on the beat, type that fills a shape, type set on a path.
+- **Type as a device:**
+  - A word that changes weight, width or family on the beat.
+  - Type that fills a shape.
+  - Type set on a path.
 - **Real material:** supplied screenshots, product thumbnails and people's photos beat invented shapes. Use every supplied asset.
 
 ## Design vocabulary
@@ -70,7 +80,11 @@ Motion is half the look. The rest is the place, the objects and the graphic syst
 
 ### Worlds
 
-- **One atmosphere per chapter:** a day sky with soft clouds for the promise, a deep night for "while you sleep", a meadow horizon for growth, a pale studio for the product.
+- **One atmosphere per chapter:**
+  - A day sky with soft clouds for the promise.
+  - A deep night for "while you sleep".
+  - A meadow horizon for growth.
+  - A pale studio for the product.
 - **Travel between them:** fly through cloud (`.cloud-pass`), blur through, or push into a screen.
 - **Flat worlds still get texture:** a tinted backdrop with light blooms and dot-grid patches in the corners.
 
@@ -90,8 +104,11 @@ Motion is half the look. The rest is the place, the objects and the graphic syst
 ### Graphic system
 
 - **Icons:** one line-icon family (`data-icon`), in tiles or inline. An icon keeps one meaning every time it returns.
-- **Stickers:** a starburst "AUTO ISI" or "NEW" slapped onto a device corner on the beat.
-- **Chapter devices:** a numbered kicker ("01 · REKOD JUALAN"), a step banner that lights 1–4, a status chip that flips from "Belum bayar" to "Dibayar".
+- **Stickers:** a starburst "AUTO-FILL" or "NEW" slapped onto a device corner on the beat.
+- **Chapter devices:**
+  - A numbered kicker ("01 · RECORD A SALE").
+  - A step banner that lights 1–4.
+  - A status chip that flips from "Unpaid" to "Paid".
 - **Real UI:** the product's own screens with real names, amounts and states. A tap mark, a bottom sheet and a toast show it in use. On a whole phone the UI can stay small as texture (`data-texture`) while callouts carry the reading.
 - **Type:** families for this product's voice, fetched with `font`. One family with strong weight and size contrast often beats two. Two families on one line need matched x-height and weight.
 - **End card:** logo, promise line, store badges or a button, and the URL.

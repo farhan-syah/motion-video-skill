@@ -614,7 +614,7 @@
 .captions {
   position: absolute;
   left: 50%;
-  bottom: var(--captions-y, 18%);
+  bottom: var(--captions-y, 18%); /* a tall frame (below) lifts it clear of the platform bottom band */
   translate: -50% 0;
   width: 88%;
   text-align: center;
@@ -644,3 +644,4 @@
   background: var(--caption-on, var(--accent));
   -webkit-text-stroke: 0;
 }
+@media (max-aspect-ratio: 1/1) { .captions { bottom: var(--captions-y, 28%); } }
